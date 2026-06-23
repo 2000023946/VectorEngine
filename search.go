@@ -2,40 +2,28 @@ package vectorengine
 
 import (
 	"fmt"
-	"math"
 )
 
 type Result struct {
-	Index    int
+	ID       int
 	Distance float32
 }
 
-func (vs *VectorStore) Search(query []float32) (Result, error) {
+func (g *Graph) Search(query []float32) (Result, error) {
 
-	if len(query) != vs.dimension {
+	if len(query) != g.Dimension {
 		return Result{}, fmt.Errorf("invalid query dimension")
 	}
 
-	if len(vs.vectors) == 0 {
+	if len(g.Nodes) == 0 {
 		return Result{}, fmt.Errorf("store is empty")
 	}
 
-	best := Result{
-		Index:    -1,
-		Distance: math.MaxFloat32,
+	nID, visited, err := g.Traverse(query)
+
+	if err != nil {
+		return Result{}, err
 	}
 
-	for i, vec := range vs.vectors {
-		dist, err := EuclideanDistance(query, vec)
-		if err != nil {
-			return Result{}, err
-		}
-
-		if dist < best.Distance {
-			best.Index = i
-			best.Distance = dist
-		}
-	}
-
-	return best, nil
+	return Result{nID, visited[nID]}, nil
 }

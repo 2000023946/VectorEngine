@@ -2,44 +2,51 @@ package vectorengine
 
 import "testing"
 
-func BenchmarkInsert(b *testing.B) {
-	vec := make([]float32, 128)
+// helper to build a vector
+func makeVec(dim int, v float32) []float32 {
+	vec := make([]float32, dim)
 	for i := range vec {
-		vec[i] = 1.0
+		vec[i] = v
 	}
+	return vec
+}
+
+func BenchmarkInsert(b *testing.B) {
+	dim := 128
+	k := 10
+
+	vec := makeVec(dim, 1.0)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		store := NewVectorStore(128, 1) // tiny capacity every iteration
+		g := NewGraphStore(dim, k)
 
+		// build graph
 		for j := 0; j < 5000; j++ {
-			store.insert(vec)
+			_ = g.Insert(vec)
 		}
 	}
 }
+
 func BenchmarkSearch(b *testing.B) {
+	dim := 128
+	k := 10
 
-	store := NewVectorStore(128, 100000)
+	g := NewGraphStore(dim, k)
 
-	vec := make([]float32, 128)
-	for i := range vec {
-		vec[i] = float32(i)
-	}
+	// preload graph
+	vec := makeVec(dim, 1.0)
 
-	// preload data
 	for i := 0; i < 100000; i++ {
-		store.insert(vec)
+		_ = g.Insert(vec)
 	}
 
-	query := make([]float32, 128)
-	for i := range query {
-		query[i] = 0.5
-	}
+	query := makeVec(dim, 0.5)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = store.Search(query)
+		_, _ = g.Search(query)
 	}
 }
