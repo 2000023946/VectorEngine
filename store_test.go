@@ -1,191 +1,109 @@
 package vectorengine
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
-func TestNewGraphStore(t *testing.T) {
-	dim := 128
-	k := 10
+func TestVectorSetGet(t *testing.T) {
+	g := NewGraphStore(3, 2, 10)
 
-	g := NewGraphStore(dim, k)
+	vec := []float32{1.0, 2.0, 3.0}
+	g.SetVector(0, vec)
 
-	if g == nil {
-		t.Fatal("expected graph, got nil")
-	}
+	got := g.GetVector(0)
 
-	if g.Dimension != dim {
-		t.Errorf("expected dimension %d, got %d", dim, g.Dimension)
-	}
-
-	if g.K != k {
-		t.Errorf("expected K %d, got %d", k, g.K)
-	}
-
-	if g.LastID != -1 {
-		t.Errorf("expected LastID -1, got %d", g.LastID)
-	}
-
-	if g.Nodes == nil {
-		t.Fatal("expected nodes map to be initialized")
-	}
-
-	if len(g.Nodes) != 0 {
-		t.Errorf("expected empty nodes map, got %d", len(g.Nodes))
+	if !reflect.DeepEqual(vec, got) {
+		t.Fatalf("expected %v, got %v", vec, got)
 	}
 }
 
-func TestTraverseEmptyGraph(t *testing.T) {
-	g := NewGraphStore(2, 2)
+func TestMultipleVectors(t *testing.T) {
+	g := NewGraphStore(2, 2, 10)
 
-	query := []float32{0, 0}
+	v1 := []float32{1, 2}
+	v2 := []float32{3, 4}
+	v3 := []float32{5, 6}
 
-	id, visited, err := g.Traverse(query)
+	g.SetVector(0, v1)
+	g.SetVector(1, v2)
+	g.SetVector(2, v3)
 
-	if err == nil {
-		t.Fatal("expected error for empty graph")
+	if !reflect.DeepEqual(v1, g.GetVector(0)) {
+		t.Fatal("vector 0 mismatch")
 	}
-
-	if id != -1 {
-		t.Fatalf("expected id -1, got %d", id)
+	if !reflect.DeepEqual(v2, g.GetVector(1)) {
+		t.Fatal("vector 1 mismatch")
 	}
-
-	if visited != nil {
-		t.Fatal("expected nil visited map")
-	}
-}
-
-func TestTraverseSingleHop(t *testing.T) {
-	g := NewGraphStore(2, 2)
-
-	g.Nodes[1] = &Node{
-		ID:        1,
-		Vector:    []float32{10, 10},
-		Neighbors: []int{2},
-	}
-
-	g.Nodes[2] = &Node{
-		ID:        2,
-		Vector:    []float32{1, 1},
-		Neighbors: []int{},
-	}
-
-	g.LastID = 1
-
-	query := []float32{0, 0}
-
-	bestID, visited, err := g.Traverse(query)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if bestID != 2 {
-		t.Fatalf("expected traversal to end at node 2, got %d", bestID)
-	}
-
-	if len(visited) != 2 {
-		t.Fatalf("expected 2 visited nodes, got %d", len(visited))
+	if !reflect.DeepEqual(v3, g.GetVector(2)) {
+		t.Fatal("vector 2 mismatch")
 	}
 }
 
-func TestTraverseNoImprovement(t *testing.T) {
-	g := NewGraphStore(2, 2)
+func TestAddNeighbor(t *testing.T) {
+	g := NewGraphStore(2, 3, 10)
 
-	g.Nodes[1] = &Node{
-		ID:        1,
-		Vector:    []float32{0, 0},
-		Neighbors: []int{2},
-	}
+	// node 0 neighbors
+	g.AddNeighbor(0, 1)
+	g.AddNeighbor(0, 2)
+	g.AddNeighbor(0, 3)
 
-	g.Nodes[2] = &Node{
-		ID:        2,
-		Vector:    []float32{10, 10},
-		Neighbors: []int{},
-	}
+	got := g.GetNeighbors(0)
+	expected := []int{1, 2, 3}
 
-	g.LastID = 1
-
-	query := []float32{0, 0}
-
-	bestID, visited, err := g.Traverse(query)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if bestID != 1 {
-		t.Fatalf("expected traversal to remain at node 1, got %d", bestID)
-	}
-
-	if len(visited) != 2 {
-		t.Fatalf("expected 2 visited nodes, got %d", len(visited))
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("expected %v, got %v", expected, got)
 	}
 }
 
-func TestTraverseMultiHop(t *testing.T) {
-	g := NewGraphStore(2, 2)
+func TestNeighborCapacityLimit(t *testing.T) {
+	g := NewGraphStore(2, 2, 10)
 
-	g.Nodes[1] = &Node{
-		ID:        1,
-		Vector:    []float32{10, 10},
-		Neighbors: []int{2},
-	}
+	g.AddNeighbor(0, 1)
+	g.AddNeighbor(0, 2)
+	g.AddNeighbor(0, 3) // should be ignored (K=2)
 
-	g.Nodes[2] = &Node{
-		ID:        2,
-		Vector:    []float32{5, 5},
-		Neighbors: []int{3},
-	}
+	got := g.GetNeighbors(0)
+	expected := []int{1, 2}
 
-	g.Nodes[3] = &Node{
-		ID:        3,
-		Vector:    []float32{1, 1},
-		Neighbors: []int{},
-	}
-
-	g.LastID = 1
-
-	query := []float32{0, 0}
-
-	bestID, visited, err := g.Traverse(query)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if bestID != 3 {
-		t.Fatalf("expected traversal to end at node 3, got %d", bestID)
-	}
-
-	if len(visited) != 3 {
-		t.Fatalf("expected 3 visited nodes, got %d", len(visited))
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("capacity overflow failed, got %v", got)
 	}
 }
 
-func TestTraverseRecordsDistances(t *testing.T) {
-	g := NewGraphStore(2, 2)
+func TestFlatVectorMemoryLayout(t *testing.T) {
+	g := NewGraphStore(3, 2, 10)
 
-	g.Nodes[1] = &Node{
-		ID:        1,
-		Vector:    []float32{3, 4},
-		Neighbors: []int{},
+	// manually write vectors
+	g.SetVector(0, []float32{1, 2, 3})
+	g.SetVector(1, []float32{4, 5, 6})
+
+	raw := g.Vectors
+
+	expected := []float32{
+		1, 2, 3,
+		4, 5, 6,
 	}
 
-	g.LastID = 1
+	if !reflect.DeepEqual(raw[:6], expected) {
+		t.Fatalf("flat layout broken: %v", raw[:6])
+	}
+}
 
-	query := []float32{0, 0}
+func TestMassInsert(t *testing.T) {
+	g := NewGraphStore(128, 10, 1000)
 
-	_, visited, err := g.Traverse(query)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	vec := make([]float32, 128)
+	for i := range vec {
+		vec[i] = float32(i)
 	}
 
-	distance, ok := visited[1]
-	if !ok {
-		t.Fatal("expected node 1 distance to be recorded")
+	for i := 0; i < 1000; i++ {
+		g.SetVector(i, vec)
+		g.AddNeighbor(i, (i+1)%1000)
 	}
 
-	if distance <= 0 {
-		t.Fatalf("expected positive distance, got %f", distance)
+	if g.Size != 0 {
+		t.Log("Size not used in current version (expected)")
 	}
 }

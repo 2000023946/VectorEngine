@@ -1,77 +1,54 @@
 package vectorengine
 
-import "fmt"
-
-type Node struct {
-	ID        int
-	Vector    []float32
-	Neighbors []int
-}
-
 type Graph struct {
-	Nodes     map[int]*Node
+	Vectors        []float32 // flat: N * Dimension
+	Neighbors      []int     // flat: N * K (fixed blocks)
+	NeighborCounts []int     // actual used neighbors per node
+
 	K         int
 	Dimension int
-	LastID    int
+	Capacity  int
+	Size      int
 }
 
-func NewGraphStore(dim int, k int) *Graph {
+func NewGraphStore(dim int, k int, maxNodes int) *Graph {
 	return &Graph{
-		Dimension: dim,
+		Vectors:        make([]float32, maxNodes*dim),
+		Neighbors:      make([]int, maxNodes*k),
+		NeighborCounts: make([]int, maxNodes),
+
 		K:         k,
-		Nodes:     make(map[int]*Node),
-		LastID:    -1,
+		Dimension: dim,
+		Capacity:  maxNodes,
+		Size:      0,
 	}
 }
 
-func (g *Graph) Traverse(vec []float32) (int, map[int]float32, error) {
-	if len(g.Nodes) == 0 {
-		return -1, nil, fmt.Errorf("Cannot Traverse Empty Graph!")
-	}
-	// STEP 1: Greedy Navigation
-	current := g.LastID
-	visited := map[int]float32{}
+func (g *Graph) GetVector(id int) []float32 {
+	start := id * g.Dimension
+	return g.Vectors[start : start+g.Dimension]
+}
 
-	for {
-		// get the node from the graph
-		curr := g.Nodes[current]
-		// initialize the best
-		best := current
-		bestDistance, err := EuclideanDistance(vec, curr.Vector)
-		if err != nil {
-			return 0, nil, err
-		}
-		visited[current] = bestDistance
-		improved := false
+func (g *Graph) SetVector(id int, vec []float32) {
+	start := id * g.Dimension
+	copy(g.Vectors[start:start+g.Dimension], vec)
+}
 
-		for _, nID := range curr.Neighbors {
-			if d, seen := visited[nID]; seen {
-				if d < bestDistance {
-					bestDistance = d
-					best = nID
-					improved = true
-				}
-				continue
-			}
-			// compute the distance
-			currDistance, err := EuclideanDistance(vec, g.Nodes[nID].Vector)
-			if err != nil {
-				return 0, nil, err
-			}
-			visited[nID] = currDistance
+func (g *Graph) GetNeighbors(id int) []int {
+	start := id * g.K
+	count := g.NeighborCounts[id]
 
-			if currDistance < bestDistance {
-				bestDistance = currDistance
-				best = nID
-				improved = true
-			}
-		}
+	return g.Neighbors[start : start+count]
+}
 
-		if !improved {
-			break
-		}
-		current = best
+func (g *Graph) AddNeighbor(id int, neighbor int) {
+	start := id * g.K
+	count := g.NeighborCounts[id]
+
+	if count >= g.K {
+		return // or replace policy (important later)
 	}
 
-	return current, visited, nil
+	g.Neighbors[start+count] = neighbor
+	g.NeighborCounts[id]++
 }

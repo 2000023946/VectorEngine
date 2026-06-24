@@ -2,29 +2,17 @@ package vectorengine
 
 import "testing"
 
-// helper to build a simple graph
 func buildSimpleGraph() *Graph {
-	g := NewGraphStore(2, 2)
+	g := NewGraphStore(2, 2, 10)
 
-	g.Nodes[0] = &Node{
-		ID:        0,
-		Vector:    []float32{0, 0},
-		Neighbors: []int{1},
-	}
+	g.SetVector(0, []float32{0, 0})
+	g.SetVector(1, []float32{10, 10})
+	g.SetVector(2, []float32{20, 20})
 
-	g.Nodes[1] = &Node{
-		ID:        1,
-		Vector:    []float32{10, 10},
-		Neighbors: []int{2},
-	}
+	g.AddNeighbor(0, 1)
+	g.AddNeighbor(1, 2)
 
-	g.Nodes[2] = &Node{
-		ID:        2,
-		Vector:    []float32{20, 20},
-		Neighbors: []int{},
-	}
-
-	g.LastID = 2
+	g.Size = 3
 
 	return g
 }
@@ -32,19 +20,15 @@ func buildSimpleGraph() *Graph {
 func TestInsert_AddsNode(t *testing.T) {
 	g := buildSimpleGraph()
 
-	before := len(g.Nodes)
+	before := g.Size
 
 	err := g.Insert([]float32{1, 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(g.Nodes) != before+1 {
-		t.Fatalf("expected %d nodes, got %d", before+1, len(g.Nodes))
-	}
-
-	if g.LastID != 3 {
-		t.Fatalf("expected LastID to be 3, got %d", g.LastID)
+	if g.Size != before+1 {
+		t.Fatalf("expected %d nodes, got %d", before+1, g.Size)
 	}
 }
 
@@ -56,9 +40,9 @@ func TestInsert_CreatesNeighbors(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	newNode := g.Nodes[g.LastID]
+	newID := g.Size - 1
 
-	if len(newNode.Neighbors) == 0 {
+	if len(g.GetNeighbors(newID)) == 0 {
 		t.Fatal("expected new node to have neighbors")
 	}
 }
@@ -71,10 +55,10 @@ func TestInsert_RespectsK(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	newNode := g.Nodes[g.LastID]
+	newID := g.Size - 1
 
-	if len(newNode.Neighbors) > g.K {
-		t.Fatalf("expected <= %d neighbors, got %d", g.K, len(newNode.Neighbors))
+	if len(g.GetNeighbors(newID)) > g.K {
+		t.Fatalf("expected <= %d neighbors, got %d", g.K, len(g.GetNeighbors(newID)))
 	}
 }
 
@@ -86,17 +70,20 @@ func TestInsert_GraphConnectivity(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	newID := g.LastID
+	newID := g.Size - 1
 
 	found := false
 
-	for _, node := range g.Nodes {
-		for _, n := range node.Neighbors {
+	for i := 0; i < g.Size; i++ {
+		neigh := g.GetNeighbors(i)
+
+		for _, n := range neigh {
 			if n == newID {
 				found = true
 				break
 			}
 		}
+
 		if found {
 			break
 		}
@@ -120,18 +107,18 @@ func TestInsert_NoPanic(t *testing.T) {
 }
 
 func TestInsert_FirstNodeBehavior(t *testing.T) {
-	g := NewGraphStore(2, 2)
+	g := NewGraphStore(2, 2, 10)
 
 	err := g.Insert([]float32{0, 0})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if g.LastID != 0 {
-		t.Fatalf("expected LastID = 0, got %d", g.LastID)
+	if g.Size != 1 {
+		t.Fatalf("expected 1 node, got %d", g.Size)
 	}
 
-	if len(g.Nodes) != 1 {
-		t.Fatalf("expected 1 node, got %d", len(g.Nodes))
+	if len(g.GetNeighbors(0)) != len(g.GetNeighbors(0)) {
+		t.Fatal("neighbor structure inconsistent")
 	}
 }

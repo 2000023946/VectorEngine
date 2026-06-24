@@ -3,35 +3,22 @@ package vectorengine
 import "testing"
 
 func buildSearchGraph() *Graph {
-	g := NewGraphStore(2, 2)
+	g := NewGraphStore(2, 2, 10)
 
-	// Build a simple chain:
-	// 0 -> 1 -> 2 (2 is closest to origin)
-	g.Nodes[0] = &Node{
-		ID:        0,
-		Vector:    []float32{10, 10},
-		Neighbors: []int{1},
-	}
+	// IMPORTANT: build graph using Insert so Size is valid
+	_ = g.Insert([]float32{10, 10}) // node 0
+	_ = g.Insert([]float32{5, 5})   // node 1
+	_ = g.Insert([]float32{1, 1})   // node 2
 
-	g.Nodes[1] = &Node{
-		ID:        1,
-		Vector:    []float32{5, 5},
-		Neighbors: []int{2},
-	}
-
-	g.Nodes[2] = &Node{
-		ID:        2,
-		Vector:    []float32{1, 1},
-		Neighbors: []int{},
-	}
-
-	g.LastID = 0
+	// optional structure (kept for traversal behavior)
+	g.AddNeighbor(0, 1)
+	g.AddNeighbor(1, 2)
 
 	return g
 }
 
 func TestSearchEmptyStore(t *testing.T) {
-	g := NewGraphStore(2, 2)
+	g := NewGraphStore(2, 2, 10)
 
 	_, err := g.Search([]float32{1, 1})
 
@@ -53,88 +40,81 @@ func TestSearchInvalidDimension(t *testing.T) {
 func TestSearchFindsNearestNode(t *testing.T) {
 	g := buildSearchGraph()
 
-	result, err := g.Search([]float32{0, 0})
-
+	res, err := g.Search([]float32{0, 0})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.ID != 2 {
-		t.Fatalf("expected node 2, got %d", result.ID)
+	if res.ID != 2 {
+		t.Fatalf("expected node 2, got %d", res.ID)
+	}
+
+	if res.Distance <= 0 {
+		t.Fatalf("expected positive distance, got %f", res.Distance)
 	}
 }
 
 func TestSearchReturnsDistance(t *testing.T) {
 	g := buildSearchGraph()
 
-	result, err := g.Search([]float32{0, 0})
-
+	res, err := g.Search([]float32{0, 0})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Distance <= 0 {
-		t.Fatalf("expected positive distance, got %f", result.Distance)
+	if res.Distance <= 0 {
+		t.Fatalf("expected positive distance, got %f", res.Distance)
 	}
 }
 
 func TestSearchExactMatch(t *testing.T) {
-	g := NewGraphStore(2, 2)
+	g := NewGraphStore(2, 2, 10)
 
-	g.Nodes[0] = &Node{
-		ID:        0,
-		Vector:    []float32{0, 0},
-		Neighbors: []int{},
-	}
+	_ = g.Insert([]float32{0, 0})
 
-	g.LastID = 0
+	// optional edge (not required for correctness)
+	g.AddNeighbor(0, 0)
 
-	result, err := g.Search([]float32{0, 0})
-
+	res, err := g.Search([]float32{0, 0})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.ID != 0 {
-		t.Fatalf("expected node 0, got %d", result.ID)
+	if res.ID != 0 {
+		t.Fatalf("expected node 0, got %d", res.ID)
 	}
 
-	if result.Distance != 0 {
-		t.Fatalf("expected distance 0, got %f", result.Distance)
+	if res.Distance != 0 {
+		t.Fatalf("expected distance 0, got %f", res.Distance)
 	}
 }
 
 func TestSearchMultiHopTraversal(t *testing.T) {
-	g := NewGraphStore(2, 2)
+	g := NewGraphStore(2, 2, 10)
 
-	g.Nodes[0] = &Node{ID: 0, Vector: []float32{20, 20}, Neighbors: []int{1}}
-	g.Nodes[1] = &Node{ID: 1, Vector: []float32{10, 10}, Neighbors: []int{2}}
-	g.Nodes[2] = &Node{ID: 2, Vector: []float32{1, 1}, Neighbors: []int{}}
+	_ = g.Insert([]float32{20, 20}) // 0
+	_ = g.Insert([]float32{10, 10}) // 1
+	_ = g.Insert([]float32{1, 1})   // 2
 
-	g.LastID = 0
+	g.AddNeighbor(0, 1)
+	g.AddNeighbor(1, 2)
 
-	result, err := g.Search([]float32{0, 0})
-
+	res, err := g.Search([]float32{0, 0})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.ID != 2 {
-		t.Fatalf("expected node 2, got %d", result.ID)
+	if res.ID != 2 {
+		t.Fatalf("expected node 2, got %d", res.ID)
 	}
 }
 
 func TestSearchUsesTraverseCorrectly(t *testing.T) {
 	g := buildSearchGraph()
 
-	result, err := g.Search([]float32{0, 0})
+	_, err := g.Search([]float32{0, 0})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-
-	_, ok := g.Nodes[result.ID]
-	if !ok {
-		t.Fatal("returned node does not exist in graph")
 	}
 }

@@ -1,73 +1,104 @@
 package vectorengine
 
-import (
-	"fmt"
-	"sort"
-)
+import "fmt"
 
 func (g *Graph) Insert(vec []float32) error {
-	if g.Dimension != len(vec) {
-		return fmt.Errorf("Vector to insert dimension does not match Graph dimension")
-	}
-	newID := g.LastID + 1
-	// STEP 1: Create Node
-	newNode := &Node{
-		ID:        newID,
-		Vector:    vec,
-		Neighbors: []int{},
+
+	// STEP 0: validate
+	if len(vec) != g.Dimension {
+		return fmt.Errorf("vector dimension mismatch")
 	}
 
-	if len(g.Nodes) == 0 {
-		g.Nodes[newID] = newNode
-		g.LastID = newID
+	newID := g.Size
+
+	if newID >= g.Capacity {
+		return fmt.Errorf("graph capacity exceeded")
 	}
 
+	// STEP 1: empty graph case
+	if g.Size == 0 {
+		g.SetVector(0, vec)
+		g.Size = 1
+		return nil
+	}
+
+	// STEP 2: traverse graph (find good region)
 	current, visited, err := g.Traverse(vec)
 	if err != nil {
 		return err
 	}
 
-	candidateSet := map[int]bool{}
-	candidateSet[current] = true
-
-	for _, nID := range g.Nodes[current].Neighbors {
-		candidateSet[nID] = true
-	}
-
+	// STEP 3: candidate selection (top-K)
 	type cand struct {
 		id   int
 		dist float32
 	}
 
-	var list []cand
+	best := make([]cand, 0, g.K)
 
-	for id := range candidateSet {
-		if d, seen := visited[id]; seen {
-			list = append(list, cand{id, d})
+	findWorst := func() int {
+		worst := 0
+		for i := 1; i < len(best); i++ {
+			if best[i].dist > best[worst].dist {
+				worst = i
+			}
+		}
+		return worst
+	}
+
+	process := func(id int) error {
+		var d float32
+
+		if dist, ok := visited[id]; ok {
+			d = dist
 		} else {
-			d, err := EuclideanDistance(vec, g.Nodes[id].Vector)
+			var err error
+			d, err = EuclideanDistance(vec, g.GetVector(id))
 			if err != nil {
 				return err
 			}
-			list = append(list, cand{id, d})
+		}
+
+		c := cand{id: id, dist: d}
+
+		if len(best) < g.K {
+			best = append(best, c)
+			return nil
+		}
+
+		worst := findWorst()
+		if c.dist < best[worst].dist {
+			best[worst] = c
+		}
+
+		return nil
+	}
+
+	// STEP 4: evaluate current + neighbors
+	if err := process(current); err != nil {
+		return err
+	}
+
+	for _, nid := range g.GetNeighbors(current) {
+		if err := process(nid); err != nil {
+			return err
 		}
 	}
 
-	sort.Slice(list, func(i, j int) bool {
-		return list[i].dist < list[j].dist
-	})
+	// STEP 5: write vector into flat storage
+	g.SetVector(newID, vec)
+	g.Size++
 
-	for i := 0; i < g.K && i < len(list); i++ {
-		nid := list[i].id
-		newNode.Neighbors = append(newNode.Neighbors, nid)
+	// STEP 6: connect graph (flat model)
+	for i := 0; i < len(best); i++ {
+		nid := best[i].id
 
-		// connect nid -> new node
-		if len(g.Nodes[nid].Neighbors) < g.K {
-			g.Nodes[nid].Neighbors = append(g.Nodes[nid].Neighbors, newNode.ID)
-		}
+		// add edge new -> neighbor
+		g.AddNeighbor(newID, nid)
+
+		// add reverse edge (bounded)
+		g.AddNeighbor(nid, newID)
 	}
 
-	g.Nodes[newID] = newNode
-	g.LastID = newID
 	return nil
 }
