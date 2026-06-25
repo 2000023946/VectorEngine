@@ -1,9 +1,14 @@
 package vectorengine
 
+import (
+	"math"
+	"math/rand/v2"
+)
+
 type Graph struct {
-	Vectors        []float32 // flat: N * Dimension
-	Neighbors      []int     // flat: N * K (fixed blocks)
-	NeighborCounts []int     // actual used neighbors per node
+	Vectors   []float32 // flat: N * Dimension
+	Neighbors []int     // flat: N * K * Log(Capacity) (levels) (fixed blocks)
+	Levels    []int     // actual used neighbors per node
 
 	K         int
 	Dimension int
@@ -12,10 +17,11 @@ type Graph struct {
 }
 
 func NewGraphStore(dim int, k int, maxNodes int) *Graph {
+	levels := int(math.Log(float64(maxNodes))) + 1
 	return &Graph{
-		Vectors:        make([]float32, maxNodes*dim),
-		Neighbors:      make([]int, maxNodes*k),
-		NeighborCounts: make([]int, maxNodes),
+		Vectors:   make([]float32, maxNodes*dim),
+		Neighbors: make([]int, maxNodes*k*levels),
+		Levels:    make([]int, levels),
 
 		K:         k,
 		Dimension: dim,
@@ -34,21 +40,28 @@ func (g *Graph) SetVector(id int, vec []float32) {
 	copy(g.Vectors[start:start+g.Dimension], vec)
 }
 
-func (g *Graph) GetNeighbors(id int) []int {
-	start := id * g.K
-	count := g.NeighborCounts[id]
+func (g *Graph) GetNeighbors(id int, layer int) []int {
+	start := layer*g.Capacity*g.K + id*g.K
 
-	return g.Neighbors[start : start+count]
+	return g.Neighbors[start : start+g.K]
 }
 
-func (g *Graph) AddNeighbor(id int, neighbor int) {
-	start := id * g.K
-	count := g.NeighborCounts[id]
+func (g *Graph) AddNeighbor(id int, neighbor int, layer int) {
+	start := layer*g.Capacity*g.K + id*g.K
+	for i := 0; i < g.K; i++ {
+		if g.Neighbors[start+i] == 0 {
+			g.Neighbors[start+i] = neighbor
+			break
+		}
+	}
+}
 
-	if count >= g.K {
-		return // or replace policy (important later)
+func (g *Graph) GenerateRandomLayer() int {
+	level := 0
+
+	for rand.Float64() < 0.5 {
+		level++
 	}
 
-	g.Neighbors[start+count] = neighbor
-	g.NeighborCounts[id]++
+	return level
 }

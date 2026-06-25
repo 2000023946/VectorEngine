@@ -1,64 +1,64 @@
 package vectorengine
 
-import "fmt"
+// import "fmt"
 
-func (g *Graph) Traverse(vec []float32) (int, map[int]float32, error) {
-	if g.Size == 0 {
-		return -1, nil, fmt.Errorf("cannot traverse empty graph")
-	}
+// func (g *Graph) Traverse(vec []float32) (int, map[int]float32, error) {
+// 	if g.Size == 0 {
+// 		return -1, nil, fmt.Errorf("cannot traverse empty graph")
+// 	}
 
-	current := 0
-	visited := make(map[int]float32)
+// 	current := 0
+// 	visited := make(map[int]float32)
 
-	for {
-		currVec := g.GetVector(current)
+// 	for {
+// 		currVec := g.GetVector(current)
 
-		best := current
-		bestDistance, err := EuclideanDistance(vec, currVec)
-		if err != nil {
-			return -1, nil, err
-		}
+// 		best := current
+// 		bestDistance, err := EuclideanDistance(vec, currVec)
+// 		if err != nil {
+// 			return -1, nil, err
+// 		}
 
-		visited[current] = bestDistance
-		improved := false
+// 		visited[current] = bestDistance
+// 		improved := false
 
-		// ✅ FIXED: use flat neighbors
-		neighbors := g.GetNeighbors(current)
+// 		// ✅ FIXED: use flat neighbors
+// 		neighbors := g.GetNeighbors(current)
 
-		for _, nID := range neighbors {
+// 		for _, nID := range neighbors {
 
-			// skip if already visited
-			if d, seen := visited[nID]; seen {
-				if d < bestDistance {
-					bestDistance = d
-					best = nID
-					improved = true
-				}
-				continue
-			}
+// 			// skip if already visited
+// 			if d, seen := visited[nID]; seen {
+// 				if d < bestDistance {
+// 					bestDistance = d
+// 					best = nID
+// 					improved = true
+// 				}
+// 				continue
+// 			}
 
-			nVec := g.GetVector(nID)
+// 			nVec := g.GetVector(nID)
 
-			currDistance, err := EuclideanDistance(vec, nVec)
-			if err != nil {
-				return -1, nil, err
-			}
+// 			currDistance, err := EuclideanDistance(vec, nVec)
+// 			if err != nil {
+// 				return -1, nil, err
+// 			}
 
-			visited[nID] = currDistance
+// 			visited[nID] = currDistance
 
-			if currDistance < bestDistance {
-				bestDistance = currDistance
-				best = nID
-				improved = true
-			}
-		}
+// 			if currDistance < bestDistance {
+// 				bestDistance = currDistance
+// 				best = nID
+// 				improved = true
+// 			}
+// 		}
 
-		if !improved {
-			break
-		}
+// 		if !improved {
+// 			break
+// 		}
 
-		current = best
-	}
+// 		current = best
+// 	}
 
-	return current, visited, nil
-}
+// 	return current, visited, nil
+// }
