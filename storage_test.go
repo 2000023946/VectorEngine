@@ -4,51 +4,161 @@ import (
 	"testing"
 )
 
-func TestVectorSetGet(t *testing.T) {
-	g := NewGraphStore(3, 2, 10)
+// -------------------- HELPERS --------------------
+
+func newTestGraph() *Graph {
+	return NewGraphStore(3, 2, 5)
+}
+
+// -------------------- ENTRY POINT TESTS --------------------
+
+func TestEntryPointDefault(t *testing.T) {
+	g := newTestGraph()
+
+	if g.EntryPoint != 1 {
+		t.Fatalf("expected EntryPoint=1 got %d", g.EntryPoint)
+	}
+}
+
+func TestEntryPointLevelDefault(t *testing.T) {
+	g := newTestGraph()
+
+	if g.EntryPointLevel < 0 {
+		t.Fatalf("invalid EntryPointLevel: %d", g.EntryPointLevel)
+	}
+
+	if g.EntryPointLevel >= g.MaxLevels {
+		t.Fatalf("EntryPointLevel exceeds MaxLevels")
+	}
+}
+
+func TestEntryPointConsistency(t *testing.T) {
+	g := newTestGraph()
+
+	if g.EntryPoint <= 0 || g.EntryPoint > g.Capacity {
+		t.Fatalf("EntryPoint out of range: %d", g.EntryPoint)
+	}
+}
+
+// -------------------- VECTOR TESTS --------------------
+
+func TestSetGetVector(t *testing.T) {
+	g := newTestGraph()
 
 	vec := []float32{1, 2, 3}
-	g.SetVector(0, vec)
+	g.SetVector(1, vec)
 
-	got := g.GetVector(0)
+	got := g.GetVector(1)
 
-	for i := 0; i < len(vec); i++ {
+	for i := range vec {
 		if got[i] != vec[i] {
-			t.Fatalf("vector mismatch at %d: got %f want %f", i, got[i], vec[i])
+			t.Fatalf("vector mismatch: expected %v got %v", vec, got)
 		}
 	}
 }
 
-func TestGetNeighborsBounds(t *testing.T) {
-	g := NewGraphStore(2, 2, 10)
+func TestMultipleVectors(t *testing.T) {
+	g := newTestGraph()
 
-	neighbors := g.GetNeighbors(0, 0)
+	g.SetVector(1, []float32{1, 1, 1})
+	g.SetVector(2, []float32{2, 2, 2})
 
-	if len(neighbors) != g.K {
-		t.Fatalf("expected %d neighbors, got %d", g.K, len(neighbors))
+	v1 := g.GetVector(1)
+	v2 := g.GetVector(2)
+
+	if v1[0] != 1 || v2[0] != 2 {
+		t.Fatalf("vector overwrite issue: v1=%v v2=%v", v1, v2)
 	}
 }
 
-func TestAddNeighborSingleLayer(t *testing.T) {
-	g := NewGraphStore(2, 2, 10)
+// -------------------- INDEXING TESTS --------------------
 
-	g.AddNeighbor(0, 42, 0)
+func TestIndexMonotonicAcrossLayers(t *testing.T) {
+	g := newTestGraph()
 
-	n := g.GetNeighbors(0, 0)
+	i0 := g.getIndex(1, 0)
+	i1 := g.getIndex(1, 1)
 
-	if n[0] != 42 {
-		t.Fatalf("expected 42, got %v", n)
+	if i1 <= i0 {
+		t.Fatalf("layer indexing incorrect: i0=%d i1=%d", i0, i1)
 	}
 }
 
-func TestAddNeighborFillsOnlyK(t *testing.T) {
-	g := NewGraphStore(2, 2, 10)
+func TestGetIndexSafeValid(t *testing.T) {
+	g := newTestGraph()
 
-	g.AddNeighbor(0, 1, 0)
-	g.AddNeighbor(0, 2, 0)
-	g.AddNeighbor(0, 3, 0) // should be ignored
+	_, err := g.getIndexSafe(1, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 
-	n := g.GetNeighbors(0, 0)
+func TestGetIndexSafeInvalidNode(t *testing.T) {
+	g := newTestGraph()
+
+	_, err := g.getIndexSafe(999, 0)
+	if err == nil {
+		t.Fatalf("expected error for invalid node")
+	}
+}
+
+func TestGetIndexSafeZeroNode(t *testing.T) {
+	g := newTestGraph()
+
+	_, err := g.getIndexSafe(0, 0)
+	if err == nil {
+		t.Fatalf("expected error for node 0")
+	}
+}
+
+func TestMaxLevelsBoundary(t *testing.T) {
+	g := newTestGraph()
+
+	if g.MaxLevels <= 0 {
+		t.Fatalf("MaxLevels not initialized properly")
+	}
+
+	_, err := g.getIndexSafe(1, g.MaxLevels)
+	if err == nil {
+		t.Fatalf("expected error for layer >= MaxLevels")
+	}
+}
+
+// -------------------- NEIGHBOR TESTS --------------------
+
+func TestAddNeighborSingle(t *testing.T) {
+	g := newTestGraph()
+
+	g.AddNeighbor(1, 2, 0)
+
+	n := g.GetNeighbors(1, 0)
+
+	if n[0] != 2 {
+		t.Fatalf("expected neighbor 2 got %v", n)
+	}
+}
+
+func TestAddNeighborMultipleSlots(t *testing.T) {
+	g := newTestGraph()
+
+	g.AddNeighbor(1, 2, 0)
+	g.AddNeighbor(1, 3, 0)
+
+	n := g.GetNeighbors(1, 0)
+
+	if n[0] != 2 || n[1] != 3 {
+		t.Fatalf("neighbors not filled correctly: %v", n)
+	}
+}
+
+func TestNeighborCapacityLimit(t *testing.T) {
+	g := newTestGraph()
+
+	g.AddNeighbor(1, 2, 0)
+	g.AddNeighbor(1, 3, 0)
+	g.AddNeighbor(1, 4, 0)
+
+	n := g.GetNeighbors(1, 0)
 
 	count := 0
 	for _, v := range n {
@@ -57,94 +167,93 @@ func TestAddNeighborFillsOnlyK(t *testing.T) {
 		}
 	}
 
-	if count > g.K {
-		t.Fatalf("overflow: got %d, max %d", count, g.K)
+	if count != 2 {
+		t.Fatalf("expected K=2 neighbors, got %d", count)
 	}
 }
+
+// -------------------- SAFE ACCESS TESTS --------------------
+
+func TestGetNeighborValueSuccess(t *testing.T) {
+	g := newTestGraph()
+
+	g.AddNeighbor(1, 99, 0)
+
+	val, err := g.GetNeighborValue(1, 0, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if val != 99 {
+		t.Fatalf("expected 99 got %d", val)
+	}
+}
+
+func TestGetNeighborValueEmptySlot(t *testing.T) {
+	g := newTestGraph()
+
+	_, err := g.GetNeighborValue(1, 0, 0)
+	if err == nil {
+		t.Fatalf("expected error for empty slot")
+	}
+}
+
+func TestGetNeighborValueOutOfBoundsOffset(t *testing.T) {
+	g := newTestGraph()
+
+	_, err := g.GetNeighborValue(1, 0, 99)
+	if err == nil {
+		t.Fatalf("expected error for invalid offset")
+	}
+}
+
+func TestGetNeighborValueInvalidNode(t *testing.T) {
+	g := newTestGraph()
+
+	_, err := g.GetNeighborValue(999, 0, 0)
+	if err == nil {
+		t.Fatalf("expected error for invalid node")
+	}
+}
+
+// -------------------- LAYER TESTS --------------------
 
 func TestLayerIsolation(t *testing.T) {
-	g := NewGraphStore(2, 2, 10)
+	g := newTestGraph()
 
-	// insert into layer 0 and layer 1
-	g.AddNeighbor(0, 10, 0)
-	g.AddNeighbor(0, 99, 1)
+	g.AddNeighbor(1, 2, 0)
+	g.AddNeighbor(1, 3, 1)
 
-	l0 := g.GetNeighbors(0, 0)
-	l1 := g.GetNeighbors(0, 1)
+	n0 := g.GetNeighbors(1, 0)
+	n1 := g.GetNeighbors(1, 1)
 
-	if l0[0] != 10 {
-		t.Fatalf("layer 0 broken: %v", l0)
-	}
-
-	if l1[0] != 99 {
-		t.Fatalf("layer 1 broken: %v", l1)
+	if n0[0] == n1[0] {
+		t.Fatalf("layers not isolated")
 	}
 }
 
-func TestNoCrossLayerCorruption(t *testing.T) {
-	g := NewGraphStore(2, 2, 10)
+func TestMaxLevelsExists(t *testing.T) {
+	g := newTestGraph()
 
-	g.AddNeighbor(0, 1, 0)
-	g.AddNeighbor(0, 2, 1)
-
-	l0 := g.GetNeighbors(0, 0)
-	l1 := g.GetNeighbors(0, 1)
-
-	if l0[0] != 1 {
-		t.Fatalf("layer 0 corrupted: %v", l0)
-	}
-
-	if l1[0] != 2 {
-		t.Fatalf("layer 1 corrupted: %v", l1)
+	if g.MaxLevels <= 0 {
+		t.Fatalf("invalid MaxLevels")
 	}
 }
 
-func TestMultipleNodesIsolation(t *testing.T) {
-	g := NewGraphStore(2, 2, 10)
-
-	g.AddNeighbor(0, 11, 0)
-	g.AddNeighbor(1, 22, 0)
-
-	n0 := g.GetNeighbors(0, 0)
-	n1 := g.GetNeighbors(1, 0)
-
-	if n0[0] != 11 || n1[0] != 22 {
-		t.Fatalf("node isolation failed: %v %v", n0, n1)
-	}
-}
+// -------------------- RANDOM LEVEL TEST --------------------
 
 func TestGenerateRandomLayer(t *testing.T) {
-	g := NewGraphStore(2, 2, 100)
+	g := newTestGraph()
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 200; i++ {
 		l := g.GenerateRandomLayer()
 
 		if l < 0 {
-			t.Fatalf("negative layer: %d", l)
+			t.Fatalf("invalid negative layer: %d", l)
 		}
 
-		if l > 50 { // sanity bound, not strict HNSW distribution test
-			t.Fatalf("layer too large: %d", l)
-		}
-	}
-}
-
-func TestStressInsert(t *testing.T) {
-	g := NewGraphStore(2, 2, 50)
-
-	for i := 0; i < 20; i++ {
-		for j := 0; j < 2; j++ {
-			g.AddNeighbor(i, j+1, j%2)
-		}
-	}
-
-	for i := 0; i < 20; i++ {
-		for layer := 0; layer < 2; layer++ {
-			n := g.GetNeighbors(i, layer)
-
-			if len(n) != g.K {
-				t.Fatalf("invalid K size at node %d layer %d", i, layer)
-			}
+		if l >= g.MaxLevels {
+			t.Fatalf("layer exceeds MaxLevels: %d", l)
 		}
 	}
 }

@@ -1,64 +1,50 @@
 package vectorengine
 
-// import "fmt"
+func (g *Graph) GreedyTraverseLayer(nodeIndex int, query []float32, layer int) (int, error) {
 
-// func (g *Graph) Traverse(vec []float32) (int, map[int]float32, error) {
-// 	if g.Size == 0 {
-// 		return -1, nil, fmt.Errorf("cannot traverse empty graph")
-// 	}
+	// start node
+	current := nodeIndex
 
-// 	current := 0
-// 	visited := make(map[int]float32)
+	currentVec := g.GetVector(current)
+	bestDist, err := EuclideanDistance(currentVec, query)
+	if err != nil {
+		return -1, err
+	}
 
-// 	for {
-// 		currVec := g.GetVector(current)
+	for {
+		improved := false
+		bestCandidate := current
+		bestCandidateDist := bestDist
 
-// 		best := current
-// 		bestDistance, err := EuclideanDistance(vec, currVec)
-// 		if err != nil {
-// 			return -1, nil, err
-// 		}
+		// get neighbors of CURRENT NODE (NOT flat array index)
+		neighbors := g.GetNeighbors(current, layer)
 
-// 		visited[current] = bestDistance
-// 		improved := false
+		for _, nb := range neighbors {
+			if nb == 0 {
+				continue
+			}
 
-// 		// ✅ FIXED: use flat neighbors
-// 		neighbors := g.GetNeighbors(current)
+			nbVec := g.GetVector(nb)
 
-// 		for _, nID := range neighbors {
+			dist, err := EuclideanDistance(nbVec, query)
+			if err != nil {
+				return -1, err
+			}
 
-// 			// skip if already visited
-// 			if d, seen := visited[nID]; seen {
-// 				if d < bestDistance {
-// 					bestDistance = d
-// 					best = nID
-// 					improved = true
-// 				}
-// 				continue
-// 			}
+			if dist < bestCandidateDist {
+				bestCandidateDist = dist
+				bestCandidate = nb
+				improved = true
+			}
+		}
 
-// 			nVec := g.GetVector(nID)
+		// if no improvement → stop
+		if !improved {
+			return current, nil
+		}
 
-// 			currDistance, err := EuclideanDistance(vec, nVec)
-// 			if err != nil {
-// 				return -1, nil, err
-// 			}
-
-// 			visited[nID] = currDistance
-
-// 			if currDistance < bestDistance {
-// 				bestDistance = currDistance
-// 				best = nID
-// 				improved = true
-// 			}
-// 		}
-
-// 		if !improved {
-// 			break
-// 		}
-
-// 		current = best
-// 	}
-
-// 	return current, visited, nil
-// }
+		// move to better node
+		current = bestCandidate
+		bestDist = bestCandidateDist
+	}
+}

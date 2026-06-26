@@ -1,42 +1,47 @@
 package vectorengine
 
-// import (
-// 	"fmt"
-// )
+import (
+	"errors"
+)
 
-// type Result struct {
-// 	ID       int
-// 	Distance float32
-// }
+func (g *Graph) Search(query []float32) (int, error) {
 
-// func (g *Graph) Search(query []float32) (Result, error) {
+	// -------------------- VALIDATE GRAPH --------------------
+	if g.Size == 0 {
+		return -1, errors.New("empty graph")
+	}
 
-// 	// STEP 1: validate dimension
-// 	if len(query) != g.Dimension {
-// 		return Result{}, fmt.Errorf("invalid query dimension")
-// 	}
+	// -------------------- VALIDATE QUERY --------------------
+	if len(query) != g.Dimension {
+		return -1, errors.New("query dimension mismatch")
+	}
 
-// 	// STEP 2: empty graph check (use Size, not len(Vectors))
-// 	if g.Size == 0 {
-// 		return Result{}, fmt.Errorf("store is empty")
-// 	}
+	// -------------------- VALIDATE ENTRY POINT --------------------
+	if g.EntryPoint <= 0 || g.EntryPoint > g.Capacity {
+		return -1, errors.New("invalid entry point")
+	}
 
-// 	// STEP 3: traverse graph (find best candidate)
-// 	bestID, _, err := g.Traverse(query)
-// 	if err != nil {
-// 		return Result{}, err
-// 	}
+	// -------------------- START FROM ENTRY POINT --------------------
+	current := g.EntryPoint
 
-// 	// STEP 4: compute final distance ONLY once (clean design)
-// 	bestVec := g.GetVector(bestID)
+	// -------------------- START FROM ENTRY POINT LEVEL --------------------
+	level := g.EntryPointLevel
 
-// 	dist, err := EuclideanDistance(query, bestVec)
-// 	if err != nil {
-// 		return Result{}, err
-// 	}
+	if level >= g.MaxLevels {
+		level = g.MaxLevels - 1
+	}
 
-// 	return Result{
-// 		ID:       bestID,
-// 		Distance: dist,
-// 	}, nil
-// }
+	// -------------------- TOP → BOTTOM DESCENT --------------------
+	for l := level; l >= 0; l-- {
+
+		next, err := g.GreedyTraverseLayer(current, query, l)
+		if err != nil {
+			return -1, err
+		}
+
+		// update current best node
+		current = next
+	}
+
+	return current, nil
+}

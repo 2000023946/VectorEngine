@@ -1,120 +1,122 @@
 package vectorengine
 
-// import "testing"
+import (
+	"testing"
+)
 
-// func buildSearchGraph() *Graph {
-// 	g := NewGraphStore(2, 2, 10)
+// -------------------- HELPERS --------------------
 
-// 	// IMPORTANT: build graph using Insert so Size is valid
-// 	_ = g.Insert([]float32{10, 10}) // node 0
-// 	_ = g.Insert([]float32{5, 5})   // node 1
-// 	_ = g.Insert([]float32{1, 1})   // node 2
+func newSearchGraph() *Graph {
+	g := NewGraphStore(3, 2, 5)
 
-// 	// optional structure (kept for traversal behavior)
-// 	g.AddNeighbor(0, 1)
-// 	g.AddNeighbor(1, 2)
+	// Ensure graph is "non-empty"
+	g.Size = 5
 
-// 	return g
-// }
+	// valid entry point setup
+	g.EntryPoint = 1
+	g.EntryPointLevel = 1
 
-// func TestSearchEmptyStore(t *testing.T) {
-// 	g := NewGraphStore(2, 2, 10)
+	// set vectors so distance logic (if used later) is stable
+	g.SetVector(1, []float32{1, 1, 1})
+	g.SetVector(2, []float32{2, 2, 2})
+	g.SetVector(3, []float32{3, 3, 3})
 
-// 	_, err := g.Search([]float32{1, 1})
+	// connect simple structure
+	g.AddNeighbor(1, 2, 0)
+	g.AddNeighbor(2, 3, 0)
 
-// 	if err == nil {
-// 		t.Fatal("expected error for empty store")
-// 	}
-// }
+	return g
+}
 
-// func TestSearchInvalidDimension(t *testing.T) {
-// 	g := buildSearchGraph()
+// -------------------- EDGE CASE TESTS --------------------
 
-// 	_, err := g.Search([]float32{1, 2, 3})
+func TestSearchEmptyGraph(t *testing.T) {
+	g := NewGraphStore(3, 2, 5)
 
-// 	if err == nil {
-// 		t.Fatal("expected dimension mismatch error")
-// 	}
-// }
+	_, err := g.Search([]float32{1, 1, 1})
+	if err == nil {
+		t.Fatalf("expected error for empty graph")
+	}
+}
 
-// func TestSearchFindsNearestNode(t *testing.T) {
-// 	g := buildSearchGraph()
+func TestSearchQueryMismatch(t *testing.T) {
+	g := newSearchGraph()
 
-// 	res, err := g.Search([]float32{0, 0})
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+	_, err := g.Search([]float32{1, 1}) // wrong dim
+	if err == nil {
+		t.Fatalf("expected query dimension mismatch error")
+	}
+}
 
-// 	if res.ID != 2 {
-// 		t.Fatalf("expected node 2, got %d", res.ID)
-// 	}
+func TestSearchInvalidEntryPointLow(t *testing.T) {
+	g := newSearchGraph()
+	g.EntryPoint = 0
 
-// 	if res.Distance <= 0 {
-// 		t.Fatalf("expected positive distance, got %f", res.Distance)
-// 	}
-// }
+	_, err := g.Search([]float32{1, 1, 1})
+	if err == nil {
+		t.Fatalf("expected invalid entry point error")
+	}
+}
 
-// func TestSearchReturnsDistance(t *testing.T) {
-// 	g := buildSearchGraph()
+func TestSearchInvalidEntryPointHigh(t *testing.T) {
+	g := newSearchGraph()
+	g.EntryPoint = 999
 
-// 	res, err := g.Search([]float32{0, 0})
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+	_, err := g.Search([]float32{1, 1, 1})
+	if err == nil {
+		t.Fatalf("expected invalid entry point error")
+	}
+}
 
-// 	if res.Distance <= 0 {
-// 		t.Fatalf("expected positive distance, got %f", res.Distance)
-// 	}
-// }
+// -------------------- CORE SEARCH PATH --------------------
 
-// func TestSearchExactMatch(t *testing.T) {
-// 	g := NewGraphStore(2, 2, 10)
+func TestSearchBasicExecution(t *testing.T) {
+	g := newSearchGraph()
 
-// 	_ = g.Insert([]float32{0, 0})
+	_, err := g.Search([]float32{1, 1, 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 
-// 	// optional edge (not required for correctness)
-// 	g.AddNeighbor(0, 0)
+// -------------------- ENTRY POINT LEVEL CLAMP --------------------
 
-// 	res, err := g.Search([]float32{0, 0})
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+func TestSearchEntryPointLevelClamp(t *testing.T) {
+	g := newSearchGraph()
 
-// 	if res.ID != 0 {
-// 		t.Fatalf("expected node 0, got %d", res.ID)
-// 	}
+	g.EntryPointLevel = 999 // force invalid high level
 
-// 	if res.Distance != 0 {
-// 		t.Fatalf("expected distance 0, got %f", res.Distance)
-// 	}
-// }
+	_, err := g.Search([]float32{1, 1, 1})
+	if err != nil {
+		t.Fatalf("should clamp entry point level instead of failing")
+	}
+}
 
-// func TestSearchMultiHopTraversal(t *testing.T) {
-// 	g := NewGraphStore(2, 2, 10)
+// -------------------- FULL FLOW SIMULATION --------------------
 
-// 	_ = g.Insert([]float32{20, 20}) // 0
-// 	_ = g.Insert([]float32{10, 10}) // 1
-// 	_ = g.Insert([]float32{1, 1})   // 2
+// This test ensures the loop executes all layers safely
+func TestSearchLayerLoopExecution(t *testing.T) {
+	g := newSearchGraph()
 
-// 	g.AddNeighbor(0, 1)
-// 	g.AddNeighbor(1, 2)
+	g.EntryPointLevel = 2 // ensure multiple iterations
 
-// 	res, err := g.Search([]float32{0, 0})
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+	_, err := g.Search([]float32{1, 1, 1})
+	if err != nil {
+		t.Fatalf("unexpected error in layered traversal: %v", err)
+	}
+}
 
-// 	if res.ID != 2 {
-// 		t.Fatalf("expected node 2, got %d", res.ID)
-// 	}
-// }
+// -------------------- STRUCTURAL INTEGRITY --------------------
 
-// func TestSearchUsesTraverseCorrectly(t *testing.T) {
-// 	g := buildSearchGraph()
+func TestSearchReturnsValidNode(t *testing.T) {
+	g := newSearchGraph()
 
-// 	_, err := g.Search([]float32{0, 0})
+	result, err := g.Search([]float32{1, 1, 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
-// }
+	if result <= 0 {
+		t.Fatalf("invalid result node: %d", result)
+	}
+}

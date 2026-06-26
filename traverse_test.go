@@ -1,128 +1,174 @@
 package vectorengine
 
-// import "testing"
+import (
+	"math"
+	"testing"
+)
 
-// func buildTraverseGraph() *Graph {
-// 	g := NewGraphStore(2, 2, 10)
+// -------------------- TEST HELPERS --------------------
 
-// 	// IMPORTANT: use Insert so Size is correct
-// 	_ = g.Insert([]float32{10, 10}) // node 0
-// 	_ = g.Insert([]float32{1, 1})   // node 1
+func makeSimpleGraph() *Graph {
+	g := NewGraphStore(2, 2, 5) // dim=2, K=2, maxNodes=5
 
-// 	g.AddNeighbor(0, 1)
+	// vectors designed for predictable distance behavior
+	// node 1 = origin
+	g.SetVector(1, []float32{0, 0})
 
-// 	return g
-// }
+	// node 2 = slightly closer to query
+	g.SetVector(2, []float32{1, 1})
 
-// func TestTraverseEmptyGraph(t *testing.T) {
-// 	g := NewGraphStore(2, 2, 10)
+	// node 3 = farthest
+	g.SetVector(3, []float32{10, 10})
 
-// 	query := []float32{0, 0}
+	return g
+}
 
-// 	id, visited, err := g.Traverse(query)
+// helper distance for validation
+func dist(a, b []float32) float64 {
+	sum := 0.0
+	for i := range a {
+		d := float64(a[i] - b[i])
+		sum += d * d
+	}
+	return math.Sqrt(sum)
+}
 
-// 	if err == nil {
-// 		t.Fatal("expected error for empty graph")
-// 	}
+// -------------------- BASIC SUCCESS PATH --------------------
 
-// 	if id != -1 {
-// 		t.Fatalf("expected id -1, got %d", id)
-// 	}
+func TestGreedyTraverseLayerImproves(t *testing.T) {
+	g := makeSimpleGraph()
 
-// 	if visited != nil {
-// 		t.Fatal("expected nil visited map")
-// 	}
-// }
-// func TestTraverseSingleHop(t *testing.T) {
-// 	g := buildTraverseGraph()
+	// build graph connections:
+	// 1 → 2 → 3 (chain)
+	g.AddNeighbor(1, 2, 0)
+	g.AddNeighbor(2, 3, 0)
 
-// 	query := []float32{0, 0}
+	query := []float32{2, 2}
 
-// 	bestID, visited, err := g.Traverse(query)
+	result, err := g.GreedyTraverseLayer(1, query, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+	// should end closer to node 2 than node 1
+	if result != 2 {
+		t.Fatalf("expected to converge to node 2, got %d", result)
+	}
+}
 
-// 	if bestID != 1 {
-// 		t.Fatalf("expected traversal to end at node 1, got %d", bestID)
-// 	}
+// -------------------- NO IMPROVEMENT STOPS --------------------
 
-// 	if len(visited) != 2 {
-// 		t.Fatalf("expected 2 visited nodes, got %d", len(visited))
-// 	}
-// }
-// func TestTraverseNoImprovement(t *testing.T) {
-// 	g := NewGraphStore(2, 2, 10)
+func TestGreedyTraverseStopsWhenNoImprovement(t *testing.T) {
+	g := makeSimpleGraph()
 
-// 	_ = g.Insert([]float32{0, 0})   // node 0
-// 	_ = g.Insert([]float32{10, 10}) // node 1
+	// node 1 isolated (no neighbors)
+	query := []float32{100, 100}
 
-// 	g.AddNeighbor(0, 1)
+	result, err := g.GreedyTraverseLayer(1, query, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-// 	query := []float32{0, 0}
+	if result != 1 {
+		t.Fatalf("expected to stay at node 1, got %d", result)
+	}
+}
 
-// 	bestID, visited, err := g.Traverse(query)
+// -------------------- BEST NEIGHBOR SELECTION --------------------
 
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+func TestGreedyTraverseSelectsBestNeighbor(t *testing.T) {
+	g := makeSimpleGraph()
 
-// 	if bestID != 0 {
-// 		t.Fatalf("expected traversal to remain at node 0, got %d", bestID)
-// 	}
+	// node 1 connects to both node 2 and 3
+	g.AddNeighbor(1, 2, 0)
+	g.AddNeighbor(1, 3, 0)
 
-// 	if len(visited) != 2 {
-// 		t.Fatalf("expected 2 visited nodes, got %d", len(visited))
-// 	}
-// }
+	query := []float32{1, 1}
 
-// func TestTraverseMultiHop(t *testing.T) {
-// 	g := NewGraphStore(2, 2, 10)
+	result, err := g.GreedyTraverseLayer(1, query, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-// 	_ = g.Insert([]float32{10, 10}) // 0
-// 	_ = g.Insert([]float32{5, 5})   // 1
-// 	_ = g.Insert([]float32{1, 1})   // 2
+	// node 2 is closer than node 3
+	if result != 2 {
+		t.Fatalf("expected node 2 (closer), got %d", result)
+	}
+}
 
-// 	g.AddNeighbor(0, 1)
-// 	g.AddNeighbor(1, 2)
+// -------------------- MULTI-STEP DESCENT --------------------
 
-// 	query := []float32{0, 0}
+func TestGreedyTraverseMultiStep(t *testing.T) {
+	g := makeSimpleGraph()
 
-// 	bestID, visited, err := g.Traverse(query)
+	// chain: 1 → 2 → 3
+	g.AddNeighbor(1, 2, 0)
+	g.AddNeighbor(2, 3, 0)
 
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+	query := []float32{9, 9}
 
-// 	if bestID != 2 {
-// 		t.Fatalf("expected traversal to end at node 2, got %d", bestID)
-// 	}
+	result, err := g.GreedyTraverseLayer(1, query, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-// 	if len(visited) != 3 {
-// 		t.Fatalf("expected 3 visited nodes, got %d", len(visited))
-// 	}
-// }
+	// should reach deepest node in chain
+	if result != 3 {
+		t.Fatalf("expected node 3, got %d", result)
+	}
+}
 
-// func TestTraverseRecordsDistances(t *testing.T) {
-// 	g := NewGraphStore(2, 2, 10)
+// -------------------- EMPTY NEIGHBOR SAFETY --------------------
 
-// 	_ = g.Insert([]float32{3, 4}) // node 0
+func TestGreedyTraverseEmptyNeighbors(t *testing.T) {
+	g := makeSimpleGraph()
 
-// 	query := []float32{0, 0}
+	// no neighbors at all
+	query := []float32{1, 1}
 
-// 	_, visited, err := g.Traverse(query)
+	result, err := g.GreedyTraverseLayer(1, query, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+	if result != 1 {
+		t.Fatalf("expected to remain at node 1, got %d", result)
+	}
+}
 
-// 	distance, ok := visited[0]
-// 	if !ok {
-// 		t.Fatal("expected node 0 distance to be recorded")
-// 	}
+// -------------------- DISTANCE INTEGRITY CHECK --------------------
 
-// 	if distance <= 0 {
-// 		t.Fatalf("expected positive distance, got %f", distance)
-// 	}
-// }
+func TestGreedyTraverseActuallyImprovesDistance(t *testing.T) {
+	g := makeSimpleGraph()
+
+	g.AddNeighbor(1, 2, 0)
+
+	query := []float32{2, 2}
+
+	startDist := dist(g.GetVector(1), query)
+
+	result, err := g.GreedyTraverseLayer(1, query, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	endDist := dist(g.GetVector(result), query)
+
+	if endDist > startDist {
+		t.Fatalf("greedy traversal did not improve distance")
+	}
+}
+
+// -------------------- INVALID QUERY SAFETY --------------------
+
+func TestGreedyTraverseInvalidVectorsHandled(t *testing.T) {
+	g := makeSimpleGraph()
+
+	// invalid query size (should trigger EuclideanDistance error depending on your implementation)
+	query := []float32{1}
+
+	_, err := g.GreedyTraverseLayer(1, query, 0)
+	if err == nil {
+		t.Fatalf("expected error for invalid query dimension")
+	}
+}
