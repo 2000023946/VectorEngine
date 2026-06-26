@@ -2,31 +2,45 @@ package vectorengine
 
 import "testing"
 
-// -------------------- LARGE FIXTURE --------------------
+// -------------------- CONFIG --------------------
 
-func newBenchGraph(b *testing.B) *Graph {
-	// large capacity so no resizing / pressure
-	g := NewGraphStore(64, 16, 100000)
-	return g
+const (
+	BenchDim      = 64
+	BenchK        = 16
+	BenchCapacity = 1_000_000
+	BenchPreload  = 500_000
+)
+
+// -------------------- FIXTURE --------------------
+
+func newBenchGraph1M() *Graph {
+	return NewGraphStore(BenchDim, BenchK, BenchCapacity)
 }
 
-// -------------------- INIT BENCHMARK --------------------
+// -------------------- VECTOR --------------------
 
-func BenchmarkGraphInit(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		_ = NewGraphStore(64, 16, 100000)
-	}
-}
-
-// -------------------- INSERT BENCHMARK --------------------
-
-func BenchmarkInsert(b *testing.B) {
-	g := newBenchGraph(b)
-
-	vec := make([]float32, 64)
+func makeBenchVec() []float32 {
+	vec := make([]float32, BenchDim)
 	for i := range vec {
 		vec[i] = float32(i)
 	}
+	return vec
+}
+
+// -------------------- INIT --------------------
+
+func BenchmarkGraphInit1M(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = NewGraphStore(BenchDim, BenchK, BenchCapacity)
+	}
+}
+
+// -------------------- INSERT (1M SCALE) --------------------
+
+func BenchmarkInsert1M(b *testing.B) {
+	g := newBenchGraph1M()
+
+	vec := makeBenchVec()
 
 	b.ResetTimer()
 
@@ -38,22 +52,16 @@ func BenchmarkInsert(b *testing.B) {
 	}
 }
 
-// -------------------- BATCH INSERT BENCHMARK --------------------
+// -------------------- BULK INSERT (1M SCALE) --------------------
 
-func BenchmarkBulkInsert(b *testing.B) {
-	g := newBenchGraph(b)
+func BenchmarkBulkInsert1M(b *testing.B) {
+	g := newBenchGraph1M()
 
-	vec := make([]float32, 64)
-	for i := range vec {
-		vec[i] = float32(i)
-	}
+	vec := makeBenchVec()
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		id := i % 100000
-		_ = id // ensure distribution idea
-
 		_, err := g.Insert(vec)
 		if err != nil {
 			b.Fatalf("bulk insert failed: %v", err)
@@ -61,18 +69,15 @@ func BenchmarkBulkInsert(b *testing.B) {
 	}
 }
 
-// -------------------- SEARCH BENCHMARK --------------------
+// -------------------- SEARCH (500K PRELOAD) --------------------
 
-func BenchmarkSearch(b *testing.B) {
-	g := newBenchGraph(b)
+func BenchmarkSearch1M(b *testing.B) {
+	g := newBenchGraph1M()
 
-	vec := make([]float32, 64)
-	for i := range vec {
-		vec[i] = float32(i)
-	}
+	vec := makeBenchVec()
 
-	// preload graph so search is meaningful
-	for i := 1; i <= 50000; i++ {
+	// -------------------- PRELOAD PHASE --------------------
+	for i := 0; i < BenchPreload; i++ {
 		_, err := g.Insert(vec)
 		if err != nil {
 			b.Fatalf("preload insert failed: %v", err)
@@ -89,18 +94,15 @@ func BenchmarkSearch(b *testing.B) {
 	}
 }
 
-// -------------------- SEARCH AFTER HEAVY INSERT LOAD --------------------
+// -------------------- SEARCH AFTER FULL SCALE LOAD --------------------
 
-func BenchmarkSearchAfterHeavyInsert(b *testing.B) {
-	g := newBenchGraph(b)
+func BenchmarkSearchFull1M(b *testing.B) {
+	g := newBenchGraph1M()
 
-	vec := make([]float32, 64)
-	for i := range vec {
-		vec[i] = float32(i)
-	}
+	vec := makeBenchVec()
 
-	// heavy insert phase
-	for i := 1; i <= 80000; i++ {
+	// -------------------- FULL LOAD PHASE --------------------
+	for i := 0; i < BenchCapacity; i++ {
 		_, err := g.Insert(vec)
 		if err != nil {
 			b.Fatalf("preload insert failed: %v", err)
