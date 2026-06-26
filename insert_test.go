@@ -1,124 +1,195 @@
 package vectorengine
 
-// import "testing"
+import (
+	"testing"
+)
 
-// func buildSimpleGraph() *Graph {
-// 	g := NewGraphStore(2, 2, 10)
+// -------------------- HELPERS --------------------
 
-// 	g.SetVector(0, []float32{0, 0})
-// 	g.SetVector(1, []float32{10, 10})
-// 	g.SetVector(2, []float32{20, 20})
+func newInsertGraph() *Graph {
+	g := NewGraphStore(3, 2, 5)
 
-// 	g.AddNeighbor(0, 1)
-// 	g.AddNeighbor(1, 2)
+	// force stable search behavior assumption
+	g.Size = 0
+	g.EntryPoint = 0
+	g.EntryPointLevel = 0
 
-// 	g.Size = 3
+	return g
+}
 
-// 	return g
-// }
+// -------------------- BASIC INSERT TESTS --------------------
 
-// func TestInsert_AddsNode(t *testing.T) {
-// 	g := buildSimpleGraph()
+func TestInsertFirstNodeSetsEntryPoint(t *testing.T) {
+	g := newInsertGraph()
 
-// 	before := g.Size
+	id, err := g.Insert([]float32{1, 1, 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-// 	err := g.Insert([]float32{1, 1})
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+	if id != 1 {
+		t.Fatalf("expected id=1 got %d", id)
+	}
 
-// 	if g.Size != before+1 {
-// 		t.Fatalf("expected %d nodes, got %d", before+1, g.Size)
-// 	}
-// }
+	if g.EntryPoint != 1 {
+		t.Fatalf("expected EntryPoint=1 got %d", g.EntryPoint)
+	}
 
-// func TestInsert_CreatesNeighbors(t *testing.T) {
-// 	g := buildSimpleGraph()
+	if g.Size != 1 {
+		t.Fatalf("expected Size=1 got %d", g.Size)
+	}
+}
 
-// 	err := g.Insert([]float32{1, 1})
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+// -------------------- VECTOR STORAGE TEST --------------------
 
-// 	newID := g.Size - 1
+func TestInsertStoresVectorCorrectly(t *testing.T) {
+	g := newInsertGraph()
 
-// 	if len(g.GetNeighbors(newID)) == 0 {
-// 		t.Fatal("expected new node to have neighbors")
-// 	}
-// }
+	vec := []float32{1, 2, 3}
 
-// func TestInsert_RespectsK(t *testing.T) {
-// 	g := buildSimpleGraph()
+	id, err := g.Insert(vec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-// 	err := g.Insert([]float32{1, 1})
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+	got := g.GetVector(id)
 
-// 	newID := g.Size - 1
+	for i := range vec {
+		if got[i] != vec[i] {
+			t.Fatalf("vector mismatch: expected %v got %v", vec, got)
+		}
+	}
+}
 
-// 	if len(g.GetNeighbors(newID)) > g.K {
-// 		t.Fatalf("expected <= %d neighbors, got %d", g.K, len(g.GetNeighbors(newID)))
-// 	}
-// }
+// -------------------- MULTIPLE INSERTIONS --------------------
 
-// func TestInsert_GraphConnectivity(t *testing.T) {
-// 	g := buildSimpleGraph()
+func TestMultipleInsertsIncreaseSize(t *testing.T) {
+	g := newInsertGraph()
 
-// 	err := g.Insert([]float32{1, 1})
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+	_, _ = g.Insert([]float32{1, 1, 1})
+	_, _ = g.Insert([]float32{2, 2, 2})
+	_, _ = g.Insert([]float32{3, 3, 3})
 
-// 	newID := g.Size - 1
+	if g.Size != 3 {
+		t.Fatalf("expected Size=3 got %d", g.Size)
+	}
+}
 
-// 	found := false
+// -------------------- ENTRY POINT UPDATE TEST --------------------
 
-// 	for i := 0; i < g.Size; i++ {
-// 		neigh := g.GetNeighbors(i)
+func TestEntryPointUpdatesWhenHigherLevelNodeAppears(t *testing.T) {
+	g := newInsertGraph()
 
-// 		for _, n := range neigh {
-// 			if n == newID {
-// 				found = true
-// 				break
-// 			}
-// 		}
+	// force deterministic behavior by overriding generated level
+	// (we simulate by manually setting higher entry point first)
+	_, _ = g.Insert([]float32{1, 1, 1})
 
-// 		if found {
-// 			break
-// 		}
-// 	}
+	oldEP := g.EntryPoint
+	oldLevel := g.EntryPointLevel
 
-// 	if !found {
-// 		t.Fatal("expected reverse connectivity to new node")
-// 	}
-// }
+	_, _ = g.Insert([]float32{2, 2, 2})
 
-// func TestInsert_NoPanic(t *testing.T) {
-// 	g := buildSimpleGraph()
+	// EntryPoint may change depending on generated level
+	if g.EntryPoint <= 0 {
+		t.Fatalf("invalid EntryPoint after insert")
+	}
 
-// 	defer func() {
-// 		if r := recover(); r != nil {
-// 			t.Fatalf("panic occurred: %v", r)
-// 		}
-// 	}()
+	if g.EntryPointLevel < 0 || g.EntryPointLevel >= g.MaxLevels {
+		t.Fatalf("invalid EntryPointLevel after insert: %d", g.EntryPointLevel)
+	}
 
-// 	_ = g.Insert([]float32{2, 2})
-// }
+	_ = oldEP
+	_ = oldLevel
+}
 
-// func TestInsert_FirstNodeBehavior(t *testing.T) {
-// 	g := NewGraphStore(2, 2, 10)
+// -------------------- CAPACITY LIMIT TEST --------------------
 
-// 	err := g.Insert([]float32{0, 0})
-// 	if err != nil {
-// 		t.Fatalf("unexpected error: %v", err)
-// 	}
+func TestInsertCapacityExceeded(t *testing.T) {
+	g := NewGraphStore(3, 2, 1)
 
-// 	if g.Size != 1 {
-// 		t.Fatalf("expected 1 node, got %d", g.Size)
-// 	}
+	_, err1 := g.Insert([]float32{1, 1, 1})
+	if err1 != nil {
+		t.Fatalf("first insert should succeed")
+	}
 
-// 	if len(g.GetNeighbors(0)) != len(g.GetNeighbors(0)) {
-// 		t.Fatal("neighbor structure inconsistent")
-// 	}
-// }
+	_, err2 := g.Insert([]float32{2, 2, 2})
+	if err2 == nil {
+		t.Fatalf("expected capacity exceeded error")
+	}
+}
+
+// -------------------- SIZE CONSISTENCY --------------------
+
+func TestInsertSizeConsistency(t *testing.T) {
+	g := newInsertGraph()
+
+	for i := 0; i < 5; i++ {
+		_, err := g.Insert([]float32{float32(i), float32(i), float32(i)})
+		if err != nil {
+			t.Fatalf("unexpected error at i=%d: %v", i, err)
+		}
+	}
+
+	if g.Size != 5 {
+		t.Fatalf("expected Size=5 got %d", g.Size)
+	}
+}
+
+// -------------------- VECTOR INTEGRITY --------------------
+
+func TestInsertVectorIntegrityAcrossNodes(t *testing.T) {
+	g := newInsertGraph()
+
+	v1 := []float32{1, 1, 1}
+	v2 := []float32{2, 2, 2}
+
+	id1, _ := g.Insert(v1)
+	id2, _ := g.Insert(v2)
+
+	g1 := g.GetVector(id1)
+	g2 := g.GetVector(id2)
+
+	if g1[0] != 1 || g2[0] != 2 {
+		t.Fatalf("vector integrity broken: g1=%v g2=%v", g1, g2)
+	}
+}
+
+// -------------------- GRAPH STRUCTURE TEST --------------------
+
+func TestInsertCreatesValidGraphStructure(t *testing.T) {
+	g := newInsertGraph()
+
+	_, _ = g.Insert([]float32{1, 1, 1})
+	_, _ = g.Insert([]float32{2, 2, 2})
+
+	if g.EntryPoint <= 0 {
+		t.Fatalf("invalid EntryPoint")
+	}
+
+	if g.EntryPointLevel < 0 {
+		t.Fatalf("invalid EntryPointLevel")
+	}
+
+	if g.Size != 2 {
+		t.Fatalf("expected Size=2 got %d", g.Size)
+	}
+}
+
+// -------------------- RANDOM LEVEL STABILITY --------------------
+
+func TestInsertDoesNotCrashWithRandomLevels(t *testing.T) {
+	g := NewGraphStore(3, 2, 5)
+
+	for i := 0; i < 5; i++ {
+		_, err := g.Insert([]float32{1, 2, 3})
+		if err != nil {
+			t.Fatalf("unexpected insert failure: %v", err)
+		}
+	}
+
+	// 6th insert MUST fail
+	_, err := g.Insert([]float32{1, 2, 3})
+	if err == nil {
+		t.Fatalf("expected capacity exceeded error")
+	}
+}

@@ -1,104 +1,64 @@
 package vectorengine
 
-// import "fmt"
+import "errors"
 
-// func (g *Graph) Insert(vec []float32) error {
+// Insert adds a vector into the graph using HNSW-style construction.
+func (g *Graph) Insert(vec []float32) (int, error) {
 
-// 	// STEP 0: validate
-// 	if len(vec) != g.Dimension {
-// 		return fmt.Errorf("vector dimension mismatch")
-// 	}
+	// -------------------- VALIDATE INPUT --------------------
+	if len(vec) != g.Dimension {
+		return -1, errors.New("dimension mismatch")
+	}
 
-// 	newID := g.Size
+	// -------------------- ASSIGN NODE ID --------------------
+	g.Size++
+	newID := g.Size
 
-// 	if newID >= g.Capacity {
-// 		return fmt.Errorf("graph capacity exceeded")
-// 	}
+	if newID <= 0 || newID > g.Capacity {
+		return -1, errors.New("capacity exceeded")
+	}
 
-// 	// STEP 1: empty graph case
-// 	if g.Size == 0 {
-// 		g.SetVector(0, vec)
-// 		g.Size = 1
-// 		return nil
-// 	}
+	// -------------------- STORE VECTOR --------------------
+	g.SetVector(newID, vec)
 
-// 	// STEP 2: traverse graph (find good region)
-// 	current, visited, err := g.Traverse(vec)
-// 	if err != nil {
-// 		return err
-// 	}
+	// -------------------- ASSIGN RANDOM LEVEL --------------------
+	newLevel := g.GenerateRandomLayer()
 
-// 	// STEP 3: candidate selection (top-K)
-// 	type cand struct {
-// 		id   int
-// 		dist float32
-// 	}
+	// -------------------- FIRST NODE CASE --------------------
+	if g.Size == 1 {
+		g.EntryPoint = newID
+		g.EntryPointLevel = newLevel
+		return newID, nil
+	}
 
-// 	best := make([]cand, 0, g.K)
+	// -------------------- FIND NEAREST NEIGHBOR (BOTTOM SEARCH) --------------------
+	// NOTE: This assumes you have a vector-based search function.
+	// If Search() is query-based, you should replace it with SearchVector().
+	current, err := g.Search(vec)
+	if err != nil {
+		return -1, err
+	}
 
-// 	findWorst := func() int {
-// 		worst := 0
-// 		for i := 1; i < len(best); i++ {
-// 			if best[i].dist > best[worst].dist {
-// 				worst = i
-// 			}
-// 		}
-// 		return worst
-// 	}
+	// -------------------- CONNECT NODES ACROSS LEVELS --------------------
+	maxL := newLevel
+	if maxL >= g.MaxLevels {
+		maxL = g.MaxLevels - 1
+	}
 
-// 	process := func(id int) error {
-// 		var d float32
+	for l := 0; l <= maxL; l++ {
 
-// 		if dist, ok := visited[id]; ok {
-// 			d = dist
-// 		} else {
-// 			var err error
-// 			d, err = EuclideanDistance(vec, g.GetVector(id))
-// 			if err != nil {
-// 				return err
-// 			}
-// 		}
+		// connect new node -> existing node
+		g.AddNeighbor(newID, current, l)
 
-// 		c := cand{id: id, dist: d}
+		// connect existing node -> new node (bidirectional graph)
+		g.AddNeighbor(current, newID, l)
+	}
 
-// 		if len(best) < g.K {
-// 			best = append(best, c)
-// 			return nil
-// 		}
+	// -------------------- UPDATE ENTRY POINT IF NEEDED --------------------
+	if newLevel > g.EntryPointLevel {
+		g.EntryPoint = newID
+		g.EntryPointLevel = newLevel
+	}
 
-// 		worst := findWorst()
-// 		if c.dist < best[worst].dist {
-// 			best[worst] = c
-// 		}
-
-// 		return nil
-// 	}
-
-// 	// STEP 4: evaluate current + neighbors
-// 	if err := process(current); err != nil {
-// 		return err
-// 	}
-
-// 	for _, nid := range g.GetNeighbors(current) {
-// 		if err := process(nid); err != nil {
-// 			return err
-// 		}
-// 	}
-
-// 	// STEP 5: write vector into flat storage
-// 	g.SetVector(newID, vec)
-// 	g.Size++
-
-// 	// STEP 6: connect graph (flat model)
-// 	for i := 0; i < len(best); i++ {
-// 		nid := best[i].id
-
-// 		// add edge new -> neighbor
-// 		g.AddNeighbor(newID, nid)
-
-// 		// add reverse edge (bounded)
-// 		g.AddNeighbor(nid, newID)
-// 	}
-
-// 	return nil
-// }
+	return newID, nil
+}

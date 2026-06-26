@@ -1,84 +1,118 @@
 package vectorengine
 
-// import "testing"
+import "testing"
 
-// // helper
-// func makeVec(dim int, v float32) []float32 {
-// 	vec := make([]float32, dim)
-// 	for i := range vec {
-// 		vec[i] = v
-// 	}
-// 	return vec
-// }
+// -------------------- LARGE FIXTURE --------------------
 
-// //
-// // =========================
-// // 1. PURE INSERT BENCHMARK
-// // =========================
-// // Measures ONLY Insert cost
-// //
+func newBenchGraph(b *testing.B) *Graph {
+	// large capacity so no resizing / pressure
+	g := NewGraphStore(64, 16, 100000)
+	return g
+}
 
-// func BenchmarkInsert(b *testing.B) {
-// 	dim := 128
-// 	k := 10
-// 	maxNodes := 100000
+// -------------------- INIT BENCHMARK --------------------
 
-// 	vec := makeVec(dim, 1.0)
+func BenchmarkGraphInit(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = NewGraphStore(64, 16, 100000)
+	}
+}
 
-// 	g := NewGraphStore(dim, k, maxNodes)
+// -------------------- INSERT BENCHMARK --------------------
 
-// 	b.ResetTimer()
+func BenchmarkInsert(b *testing.B) {
+	g := newBenchGraph(b)
 
-// 	for i := 0; i < b.N; i++ {
-// 		_ = g.Insert(vec)
-// 	}
-// }
+	vec := make([]float32, 64)
+	for i := range vec {
+		vec[i] = float32(i)
+	}
 
-// //
-// // =========================
-// // 2. PURE SEARCH BENCHMARK
-// // =========================
-// // Measures ONLY Search cost (prebuilt graph)
-// //
+	b.ResetTimer()
 
-// func BenchmarkSearch(b *testing.B) {
-// 	dim := 128
-// 	k := 10
-// 	maxNodes := 100000
+	for i := 0; i < b.N; i++ {
+		_, err := g.Insert(vec)
+		if err != nil {
+			b.Fatalf("insert failed: %v", err)
+		}
+	}
+}
 
-// 	g := NewGraphStore(dim, k, maxNodes)
+// -------------------- BATCH INSERT BENCHMARK --------------------
 
-// 	vec := makeVec(dim, 1.0)
+func BenchmarkBulkInsert(b *testing.B) {
+	g := newBenchGraph(b)
 
-// 	// build graph ONCE (this is allowed because Search benchmark must have data)
-// 	for i := 0; i < maxNodes; i++ {
-// 		_ = g.Insert(vec)
-// 	}
+	vec := make([]float32, 64)
+	for i := range vec {
+		vec[i] = float32(i)
+	}
 
-// 	query := makeVec(dim, 0.5)
+	b.ResetTimer()
 
-// 	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		id := i % 100000
+		_ = id // ensure distribution idea
 
-// 	for i := 0; i < b.N; i++ {
-// 		_, _ = g.Search(query)
-// 	}
-// }
+		_, err := g.Insert(vec)
+		if err != nil {
+			b.Fatalf("bulk insert failed: %v", err)
+		}
+	}
+}
 
-// //
-// // =========================
-// // 3. PURE BUILD GRAPH BENCHMARK
-// // =========================
-// // Measures ONLY struct + memory allocation cost
-// //
+// -------------------- SEARCH BENCHMARK --------------------
 
-// func BenchmarkBuildGraph(b *testing.B) {
-// 	dim := 128
-// 	k := 10
-// 	maxNodes := 100000
+func BenchmarkSearch(b *testing.B) {
+	g := newBenchGraph(b)
 
-// 	b.ResetTimer()
+	vec := make([]float32, 64)
+	for i := range vec {
+		vec[i] = float32(i)
+	}
 
-// 	for i := 0; i < b.N; i++ {
-// 		_ = NewGraphStore(dim, k, maxNodes)
-// 	}
-// }
+	// preload graph so search is meaningful
+	for i := 1; i <= 50000; i++ {
+		_, err := g.Insert(vec)
+		if err != nil {
+			b.Fatalf("preload insert failed: %v", err)
+		}
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := g.Search(vec)
+		if err != nil {
+			b.Fatalf("search failed: %v", err)
+		}
+	}
+}
+
+// -------------------- SEARCH AFTER HEAVY INSERT LOAD --------------------
+
+func BenchmarkSearchAfterHeavyInsert(b *testing.B) {
+	g := newBenchGraph(b)
+
+	vec := make([]float32, 64)
+	for i := range vec {
+		vec[i] = float32(i)
+	}
+
+	// heavy insert phase
+	for i := 1; i <= 80000; i++ {
+		_, err := g.Insert(vec)
+		if err != nil {
+			b.Fatalf("preload insert failed: %v", err)
+		}
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := g.Search(vec)
+		if err != nil {
+			b.Fatalf("search failed: %v", err)
+		}
+	}
+}
