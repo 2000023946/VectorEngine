@@ -35,7 +35,7 @@ func dist(a, b []float32) float64 {
 
 // -------------------- BASIC SUCCESS PATH --------------------
 
-func TestGreedyTraverseLayerImproves(t *testing.T) {
+func TestUnitGreedyTraverseLayerImproves(t *testing.T) {
 	g := makeSimpleGraph()
 
 	// build graph connections:
@@ -58,7 +58,7 @@ func TestGreedyTraverseLayerImproves(t *testing.T) {
 
 // -------------------- NO IMPROVEMENT STOPS --------------------
 
-func TestGreedyTraverseStopsWhenNoImprovement(t *testing.T) {
+func TestUnitGreedyTraverseStopsWhenNoImprovement(t *testing.T) {
 	g := makeSimpleGraph()
 
 	// node 1 isolated (no neighbors)
@@ -76,7 +76,7 @@ func TestGreedyTraverseStopsWhenNoImprovement(t *testing.T) {
 
 // -------------------- BEST NEIGHBOR SELECTION --------------------
 
-func TestGreedyTraverseSelectsBestNeighbor(t *testing.T) {
+func TestUnitGreedyTraverseSelectsBestNeighbor(t *testing.T) {
 	g := makeSimpleGraph()
 
 	// node 1 connects to both node 2 and 3
@@ -98,7 +98,7 @@ func TestGreedyTraverseSelectsBestNeighbor(t *testing.T) {
 
 // -------------------- MULTI-STEP DESCENT --------------------
 
-func TestGreedyTraverseMultiStep(t *testing.T) {
+func TestUnitGreedyTraverseMultiStep(t *testing.T) {
 	g := makeSimpleGraph()
 
 	// chain: 1 → 2 → 3
@@ -120,7 +120,7 @@ func TestGreedyTraverseMultiStep(t *testing.T) {
 
 // -------------------- EMPTY NEIGHBOR SAFETY --------------------
 
-func TestGreedyTraverseEmptyNeighbors(t *testing.T) {
+func TestUnitGreedyTraverseEmptyNeighbors(t *testing.T) {
 	g := makeSimpleGraph()
 
 	// no neighbors at all
@@ -138,7 +138,7 @@ func TestGreedyTraverseEmptyNeighbors(t *testing.T) {
 
 // -------------------- DISTANCE INTEGRITY CHECK --------------------
 
-func TestGreedyTraverseActuallyImprovesDistance(t *testing.T) {
+func TestUnitGreedyTraverseActuallyImprovesDistance(t *testing.T) {
 	g := makeSimpleGraph()
 
 	g.AddNeighbor(1, 2, 0)
@@ -161,7 +161,7 @@ func TestGreedyTraverseActuallyImprovesDistance(t *testing.T) {
 
 // -------------------- INVALID QUERY SAFETY --------------------
 
-func TestGreedyTraverseInvalidVectorsHandled(t *testing.T) {
+func TestUnitGreedyTraverseInvalidVectorsHandled(t *testing.T) {
 	g := makeSimpleGraph()
 
 	// invalid query size (should trigger EuclideanDistance error depending on your implementation)

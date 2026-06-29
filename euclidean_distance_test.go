@@ -2,7 +2,7 @@ package vectorengine
 
 import "testing"
 
-func TestEuclideanDistance(t *testing.T) {
+func TestUnitEuclideanDistance(t *testing.T) {
 	a := []float32{0, 0}
 	b := []float32{3, 4}
 
@@ -17,7 +17,7 @@ func TestEuclideanDistance(t *testing.T) {
 	}
 }
 
-func TestEuclideanDistanceDimensionMismatch(t *testing.T) {
+func TestUnitEuclideanDistanceDimensionMismatch(t *testing.T) {
 	a := []float32{1, 2}
 	b := []float32{1, 2, 3}
 

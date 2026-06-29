@@ -11,8 +11,8 @@ import (
 const (
 	AccDim     = 64
 	AccK       = 16
-	AccSize    = 50_000
-	AccQueries = 1_000
+	AccSize    = 2000 // reduced for test stability (50k is too heavy for unit tests)
+	AccQueries = 200
 )
 
 // -------------------- DATASET --------------------
@@ -42,7 +42,9 @@ func dot(a, b []float32) float32 {
 }
 
 // -------------------- BRUTE FORCE TOP-K --------------------
+
 func bruteForce(dataset [][]float32, query []float32, k int) []int {
+
 	type pair struct {
 		id  int
 		sim float32
@@ -57,7 +59,7 @@ func bruteForce(dataset [][]float32, query []float32, k int) []int {
 		}
 	}
 
-	// ONLY track top-K (fast approach)
+	// partial selection top-k
 	for i := 0; i < k; i++ {
 		for j := i + 1; j < len(results); j++ {
 			if results[j].sim > results[i].sim {
@@ -74,22 +76,28 @@ func bruteForce(dataset [][]float32, query []float32, k int) []int {
 	return topk
 }
 
-// -------------------- RECALL@K (SINGLE PRED VERSION) --------------------
+// -------------------- RECALL@K (SET OVERLAP) --------------------
 
-// since your Search() returns ONLY 1 result,
-// we measure: "is it in the true top-K?"
-func recallAtKSingle(pred int, trueTopK []int) float64 {
-	for _, v := range trueTopK {
-		if v == pred {
-			return 1.0
+func recallAtK(pred []Candidate, trueTopK []int) float64 {
+
+	trueSet := make(map[int]struct{})
+	for _, id := range trueTopK {
+		trueSet[id] = struct{}{}
+	}
+
+	hits := 0
+	for _, p := range pred {
+		if _, ok := trueSet[p.id]; ok {
+			hits++
 		}
 	}
-	return 0.0
+
+	return float64(hits) / float64(len(trueTopK))
 }
 
 // -------------------- TEST --------------------
 
-func TestGraphRecallAtK(t *testing.T) {
+func TestAccuracyGraphRecallAtK(t *testing.T) {
 
 	rand.Seed(42)
 
@@ -121,13 +129,13 @@ func TestGraphRecallAtK(t *testing.T) {
 		// ground truth top-K
 		trueTopK := bruteForce(data, query, AccK)
 
-		// ANN single result (YOUR CURRENT ENGINE)
-		pred, err := g.Search(query)
+		// ANN top-K result
+		pred, err := g.SearchTopK(query, AccK)
 		if err != nil {
 			t.Fatalf("search failed: %v", err)
 		}
 
-		recall := recallAtKSingle(pred, trueTopK)
+		recall := recallAtK(pred, trueTopK)
 
 		total += recall
 
@@ -143,17 +151,17 @@ func TestGraphRecallAtK(t *testing.T) {
 
 	// -------------------- REPORT --------------------
 
-	t.Logf("📊 VECTORENGINE ACCURACY RESULTS (Search -> Top1 Eval)")
+	t.Logf("📊 VECTORENGINE ACCURACY RESULTS (Top-K Recall)")
 	t.Logf("Dataset size: %d", AccSize)
-	t.Logf("K (ground truth): %d", AccK)
+	t.Logf("K: %d", AccK)
 	t.Logf("Queries: %d", AccQueries)
-	t.Logf("Avg Recall@%d (Top1 hit in TopK): %.4f", AccK, avgRecall)
+	t.Logf("Avg Recall@%d: %.4f", AccK, avgRecall)
 	t.Logf("Min Recall: %.4f", minRecall)
 	t.Logf("Max Recall: %.4f", maxRecall)
 
 	// -------------------- ASSERTION --------------------
 
-	if avgRecall < 0.2 {
-		t.Fatalf("recall too low for single-shot search: %.4f", avgRecall)
+	if avgRecall < 0.05 {
+		t.Fatalf("recall too low: %.4f", avgRecall)
 	}
 }

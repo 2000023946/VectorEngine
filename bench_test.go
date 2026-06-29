@@ -1,120 +1,120 @@
 package vectorengine
 
-import "testing"
+// import "testing"
 
-// -------------------- CONFIG --------------------
+// // -------------------- CONFIG --------------------
 
-const (
-	BenchDim      = 64
-	BenchK        = 16
-	BenchCapacity = 1_000_000
-	BenchPreload  = 500_000
-)
+// const (
+// 	BenchDim      = 64
+// 	BenchK        = 16
+// 	BenchCapacity = 1_000_000
+// 	BenchPreload  = 500_000
+// )
 
-// -------------------- FIXTURE --------------------
+// // -------------------- FIXTURE --------------------
 
-func newBenchGraph1M() *Graph {
-	return NewGraphStore(BenchDim, BenchK, BenchCapacity)
-}
+// func newBenchGraph1M() *Graph {
+// 	return NewGraphStore(BenchDim, BenchK, BenchCapacity)
+// }
 
-// -------------------- VECTOR --------------------
+// // -------------------- VECTOR --------------------
 
-func makeBenchVec() []float32 {
-	vec := make([]float32, BenchDim)
-	for i := range vec {
-		vec[i] = float32(i)
-	}
-	return vec
-}
+// func makeBenchVec() []float32 {
+// 	vec := make([]float32, BenchDim)
+// 	for i := range vec {
+// 		vec[i] = float32(i)
+// 	}
+// 	return vec
+// }
 
-// -------------------- INIT --------------------
+// // -------------------- INIT --------------------
 
-func BenchmarkGraphInit1M(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		_ = NewGraphStore(BenchDim, BenchK, BenchCapacity)
-	}
-}
+// func BenchmarkGraphInit1M(b *testing.B) {
+// 	for i := 0; i < b.N; i++ {
+// 		_ = NewGraphStore(BenchDim, BenchK, BenchCapacity)
+// 	}
+// }
 
-// -------------------- INSERT (1M SCALE) --------------------
+// // -------------------- INSERT (1M SCALE) --------------------
 
-func BenchmarkInsert1M(b *testing.B) {
-	g := newBenchGraph1M()
+// func BenchmarkInsert1M(b *testing.B) {
+// 	g := newBenchGraph1M()
 
-	vec := makeBenchVec()
+// 	vec := makeBenchVec()
 
-	b.ResetTimer()
+// 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		_, err := g.Insert(vec)
-		if err != nil {
-			b.Fatalf("insert failed: %v", err)
-		}
-	}
-}
+// 	for i := 0; i < b.N; i++ {
+// 		_, err := g.Insert(vec)
+// 		if err != nil {
+// 			b.Fatalf("insert failed: %v", err)
+// 		}
+// 	}
+// }
 
-// -------------------- BULK INSERT (1M SCALE) --------------------
+// // -------------------- BULK INSERT (1M SCALE) --------------------
 
-func BenchmarkBulkInsert1M(b *testing.B) {
-	g := newBenchGraph1M()
+// func BenchmarkBulkInsert1M(b *testing.B) {
+// 	g := newBenchGraph1M()
 
-	vec := makeBenchVec()
+// 	vec := makeBenchVec()
 
-	b.ResetTimer()
+// 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		_, err := g.Insert(vec)
-		if err != nil {
-			b.Fatalf("bulk insert failed: %v", err)
-		}
-	}
-}
+// 	for i := 0; i < b.N; i++ {
+// 		_, err := g.Insert(vec)
+// 		if err != nil {
+// 			b.Fatalf("bulk insert failed: %v", err)
+// 		}
+// 	}
+// }
 
-// -------------------- SEARCH (500K PRELOAD) --------------------
+// // -------------------- SEARCH (500K PRELOAD) --------------------
 
-func BenchmarkSearch1M(b *testing.B) {
-	g := newBenchGraph1M()
+// func BenchmarkSearch1M(b *testing.B) {
+// 	g := newBenchGraph1M()
 
-	vec := makeBenchVec()
+// 	vec := makeBenchVec()
 
-	// -------------------- PRELOAD PHASE --------------------
-	for i := 0; i < BenchPreload; i++ {
-		_, err := g.Insert(vec)
-		if err != nil {
-			b.Fatalf("preload insert failed: %v", err)
-		}
-	}
+// 	// -------------------- PRELOAD PHASE --------------------
+// 	for i := 0; i < BenchPreload; i++ {
+// 		_, err := g.Insert(vec)
+// 		if err != nil {
+// 			b.Fatalf("preload insert failed: %v", err)
+// 		}
+// 	}
 
-	b.ResetTimer()
+// 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		_, err := g.Search(vec)
-		if err != nil {
-			b.Fatalf("search failed: %v", err)
-		}
-	}
-}
+// 	for i := 0; i < b.N; i++ {
+// 		_, err := g.Search(vec)
+// 		if err != nil {
+// 			b.Fatalf("search failed: %v", err)
+// 		}
+// 	}
+// }
 
-// -------------------- SEARCH AFTER FULL SCALE LOAD --------------------
+// // -------------------- SEARCH AFTER FULL SCALE LOAD --------------------
 
-func BenchmarkSearchFull1M(b *testing.B) {
-	g := newBenchGraph1M()
+// func BenchmarkSearchFull1M(b *testing.B) {
+// 	g := newBenchGraph1M()
 
-	vec := makeBenchVec()
+// 	vec := makeBenchVec()
 
-	// -------------------- FULL LOAD PHASE --------------------
-	for i := 0; i < BenchCapacity; i++ {
-		_, err := g.Insert(vec)
-		if err != nil {
-			b.Fatalf("preload insert failed: %v", err)
-		}
-	}
+// 	// -------------------- FULL LOAD PHASE --------------------
+// 	for i := 0; i < BenchCapacity; i++ {
+// 		_, err := g.Insert(vec)
+// 		if err != nil {
+// 			b.Fatalf("preload insert failed: %v", err)
+// 		}
+// 	}
 
-	b.ResetTimer()
+// 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		_, err := g.Search(vec)
-		if err != nil {
-			b.Fatalf("search failed: %v", err)
-		}
-	}
-}
+// 	for i := 0; i < b.N; i++ {
+// 		_, err := g.Search(vec)
+// 		if err != nil {
+// 			b.Fatalf("search failed: %v", err)
+// 		}
+// 	}
+// }

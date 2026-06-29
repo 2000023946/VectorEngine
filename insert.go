@@ -1,63 +1,94 @@
 package vectorengine
 
-import "errors"
+import (
+	"errors"
+	"sort"
+)
 
-// Insert adds a vector into the graph using HNSW-style construction.
+// =========================================================
+// INSERT USING EF CANDIDATE POOL
+// GRAPH DEGREE = g.K (no separate M)
+// =========================================================
+
 func (g *Graph) Insert(vec []float32) (int, error) {
 
-	// -------------------- VALIDATE INPUT --------------------
+	// -------------------- VALIDATE --------------------
 	if len(vec) != g.Dimension {
 		return -1, errors.New("dimension mismatch")
+	}
+
+	if g.K <= 0 {
+		return -1, errors.New("invalid graph degree K")
 	}
 
 	// -------------------- ASSIGN NODE ID --------------------
 	g.Size++
 	newID := g.Size
 
-	if newID <= 0 || newID > g.Capacity {
+	if newID > g.Capacity {
 		return -1, errors.New("capacity exceeded")
 	}
 
 	// -------------------- STORE VECTOR --------------------
 	g.SetVector(newID, vec)
 
-	// -------------------- ASSIGN RANDOM LEVEL --------------------
-	newLevel := g.GenerateRandomLayer()
-
-	// -------------------- FIRST NODE CASE --------------------
+	// -------------------- FIRST NODE --------------------
 	if g.Size == 1 {
 		g.EntryPoint = newID
-		g.EntryPointLevel = newLevel
+		g.EntryPointLevel = 0
 		return newID, nil
 	}
 
-	// -------------------- FIND NEAREST NEIGHBOR (BOTTOM SEARCH) --------------------
-	// NOTE: This assumes you have a vector-based search function.
-	// If Search() is query-based, you should replace it with SearchVector().
-	current, err := g.Search(vec)
+	// =====================================================
+	// STEP 1: GET EF CANDIDATE POOL
+	// =====================================================
+
+	pool, err := g.GenerateCandidatePool(vec)
 	if err != nil {
 		return -1, err
 	}
 
-	// -------------------- CONNECT NODES ACROSS LEVELS --------------------
-	maxL := newLevel
-	if maxL >= g.MaxLevels {
-		maxL = g.MaxLevels - 1
+	if len(pool) == 0 {
+		return -1, errors.New("empty candidate pool")
 	}
 
-	for l := 0; l <= maxL; l++ {
+	// =====================================================
+	// STEP 2: SORT BY DISTANCE (BEST FIRST)
+	// =====================================================
 
-		// connect new node -> existing node
-		g.AddNeighbor(newID, current, l)
+	sort.Slice(pool, func(i, j int) bool {
+		return pool[i].dist < pool[j].dist
+	})
 
-		// connect existing node -> new node (bidirectional graph)
-		g.AddNeighbor(current, newID, l)
+	// =====================================================
+	// STEP 3: SELECT TOP K NEIGHBORS (GRAPH DEGREE)
+	// =====================================================
+
+	k := g.K
+	if k > len(pool) {
+		k = len(pool)
 	}
 
-	// -------------------- UPDATE ENTRY POINT IF NEEDED --------------------
-	if newLevel > g.EntryPointLevel {
-		g.EntryPoint = newID
-		g.EntryPointLevel = newLevel
+	// =====================================================
+	// STEP 4: CONNECT GRAPH (BIDIRECTIONAL)
+	// =====================================================
+
+	for i := 0; i < k; i++ {
+		nb := pool[i]
+
+		// new → neighbor
+		g.AddNeighbor(newID, nb.id, 0)
+
+		// neighbor → new
+		g.AddNeighbor(nb.id, newID, 0)
+	}
+
+	// =====================================================
+	// STEP 5: UPDATE ENTRY POINT (simple heuristic)
+	// =====================================================
+
+	if pool[0].id != 0 {
+		g.EntryPoint = pool[0].id
 	}
 
 	return newID, nil

@@ -12,7 +12,7 @@ func newTestGraph() *Graph {
 
 // -------------------- ENTRY POINT TESTS --------------------
 
-func TestEntryPointDefault(t *testing.T) {
+func TestUnitEntryPointDefault(t *testing.T) {
 	g := newTestGraph()
 
 	if g.EntryPoint != 1 {
@@ -20,7 +20,7 @@ func TestEntryPointDefault(t *testing.T) {
 	}
 }
 
-func TestEntryPointLevelDefault(t *testing.T) {
+func TestUnitEntryPointLevelDefault(t *testing.T) {
 	g := newTestGraph()
 
 	if g.EntryPointLevel < 0 {
@@ -32,7 +32,7 @@ func TestEntryPointLevelDefault(t *testing.T) {
 	}
 }
 
-func TestEntryPointConsistency(t *testing.T) {
+func TestUnitEntryPointConsistency(t *testing.T) {
 	g := newTestGraph()
 
 	if g.EntryPoint <= 0 || g.EntryPoint > g.Capacity {
@@ -42,7 +42,7 @@ func TestEntryPointConsistency(t *testing.T) {
 
 // -------------------- VECTOR TESTS --------------------
 
-func TestSetGetVector(t *testing.T) {
+func TestUnitSetGetVector(t *testing.T) {
 	g := newTestGraph()
 
 	vec := []float32{1, 2, 3}
@@ -57,7 +57,7 @@ func TestSetGetVector(t *testing.T) {
 	}
 }
 
-func TestMultipleVectors(t *testing.T) {
+func TestUnitMultipleVectors(t *testing.T) {
 	g := newTestGraph()
 
 	g.SetVector(1, []float32{1, 1, 1})
@@ -73,7 +73,7 @@ func TestMultipleVectors(t *testing.T) {
 
 // -------------------- INDEXING TESTS --------------------
 
-func TestIndexMonotonicAcrossLayers(t *testing.T) {
+func TestUnitIndexMonotonicAcrossLayers(t *testing.T) {
 	g := newTestGraph()
 
 	i0 := g.getIndex(1, 0)
@@ -84,7 +84,7 @@ func TestIndexMonotonicAcrossLayers(t *testing.T) {
 	}
 }
 
-func TestGetIndexSafeValid(t *testing.T) {
+func TestUnitGetIndexSafeValid(t *testing.T) {
 	g := newTestGraph()
 
 	_, err := g.getIndexSafe(1, 0)
@@ -93,7 +93,7 @@ func TestGetIndexSafeValid(t *testing.T) {
 	}
 }
 
-func TestGetIndexSafeInvalidNode(t *testing.T) {
+func TestUnitGetIndexSafeInvalidNode(t *testing.T) {
 	g := newTestGraph()
 
 	_, err := g.getIndexSafe(999, 0)
@@ -102,7 +102,7 @@ func TestGetIndexSafeInvalidNode(t *testing.T) {
 	}
 }
 
-func TestGetIndexSafeZeroNode(t *testing.T) {
+func TestUnitGetIndexSafeZeroNode(t *testing.T) {
 	g := newTestGraph()
 
 	_, err := g.getIndexSafe(0, 0)
@@ -111,7 +111,7 @@ func TestGetIndexSafeZeroNode(t *testing.T) {
 	}
 }
 
-func TestMaxLevelsBoundary(t *testing.T) {
+func TestUnitMaxLevelsBoundary(t *testing.T) {
 	g := newTestGraph()
 
 	if g.MaxLevels <= 0 {
@@ -126,7 +126,7 @@ func TestMaxLevelsBoundary(t *testing.T) {
 
 // -------------------- NEIGHBOR TESTS --------------------
 
-func TestAddNeighborSingle(t *testing.T) {
+func TestUnitAddNeighborSingle(t *testing.T) {
 	g := newTestGraph()
 
 	g.AddNeighbor(1, 2, 0)
@@ -138,7 +138,7 @@ func TestAddNeighborSingle(t *testing.T) {
 	}
 }
 
-func TestAddNeighborMultipleSlots(t *testing.T) {
+func TestUnitAddNeighborMultipleSlots(t *testing.T) {
 	g := newTestGraph()
 
 	g.AddNeighbor(1, 2, 0)
@@ -151,7 +151,7 @@ func TestAddNeighborMultipleSlots(t *testing.T) {
 	}
 }
 
-func TestNeighborCapacityLimit(t *testing.T) {
+func TestUnitNeighborCapacityLimit(t *testing.T) {
 	g := newTestGraph()
 
 	g.AddNeighbor(1, 2, 0)
@@ -174,7 +174,7 @@ func TestNeighborCapacityLimit(t *testing.T) {
 
 // -------------------- SAFE ACCESS TESTS --------------------
 
-func TestGetNeighborValueSuccess(t *testing.T) {
+func TestUnitGetNeighborValueSuccess(t *testing.T) {
 	g := newTestGraph()
 
 	g.AddNeighbor(1, 99, 0)
@@ -189,7 +189,7 @@ func TestGetNeighborValueSuccess(t *testing.T) {
 	}
 }
 
-func TestGetNeighborValueEmptySlot(t *testing.T) {
+func TestUnitGetNeighborValueEmptySlot(t *testing.T) {
 	g := newTestGraph()
 
 	_, err := g.GetNeighborValue(1, 0, 0)
@@ -198,7 +198,7 @@ func TestGetNeighborValueEmptySlot(t *testing.T) {
 	}
 }
 
-func TestGetNeighborValueOutOfBoundsOffset(t *testing.T) {
+func TestUnitGetNeighborValueOutOfBoundsOffset(t *testing.T) {
 	g := newTestGraph()
 
 	_, err := g.GetNeighborValue(1, 0, 99)
@@ -207,7 +207,7 @@ func TestGetNeighborValueOutOfBoundsOffset(t *testing.T) {
 	}
 }
 
-func TestGetNeighborValueInvalidNode(t *testing.T) {
+func TestUnitGetNeighborValueInvalidNode(t *testing.T) {
 	g := newTestGraph()
 
 	_, err := g.GetNeighborValue(999, 0, 0)
@@ -218,7 +218,7 @@ func TestGetNeighborValueInvalidNode(t *testing.T) {
 
 // -------------------- LAYER TESTS --------------------
 
-func TestLayerIsolation(t *testing.T) {
+func TestUnitLayerIsolation(t *testing.T) {
 	g := newTestGraph()
 
 	g.AddNeighbor(1, 2, 0)
@@ -232,7 +232,7 @@ func TestLayerIsolation(t *testing.T) {
 	}
 }
 
-func TestMaxLevelsExists(t *testing.T) {
+func TestUnitMaxLevelsExists(t *testing.T) {
 	g := newTestGraph()
 
 	if g.MaxLevels <= 0 {
@@ -242,7 +242,7 @@ func TestMaxLevelsExists(t *testing.T) {
 
 // -------------------- RANDOM LEVEL TEST --------------------
 
-func TestGenerateRandomLayer(t *testing.T) {
+func TestUnitGenerateRandomLayer(t *testing.T) {
 	g := newTestGraph()
 
 	for i := 0; i < 200; i++ {

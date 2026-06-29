@@ -1,0 +1,693 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>VectorEngine: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">go_tutoriols/VectorEngine/candidate.go (77.2%)</option>
+				
+				<option value="file1">go_tutoriols/VectorEngine/distance.go (100.0%)</option>
+				
+				<option value="file2">go_tutoriols/VectorEngine/insert.go (83.3%)</option>
+				
+				<option value="file3">go_tutoriols/VectorEngine/search_topk.go (87.5%)</option>
+				
+				<option value="file4">go_tutoriols/VectorEngine/storage.go (94.7%)</option>
+				
+				<option value="file5">go_tutoriols/VectorEngine/traverse.go (96.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package vectorengine
+
+import (
+        "errors"
+)
+
+const EF = 64
+
+// =========================================================
+// CANDIDATE
+// =========================================================
+
+type Candidate struct {
+        id   int
+        dist float32
+}
+
+// =========================================================
+// MAX HEAP (frontier only)
+// worst (largest distance) at root
+// =========================================================
+
+type MaxHeap struct {
+        data []Candidate
+}
+
+func (h *MaxHeap) less(i, j int) bool <span class="cov8" title="1">{
+        return h.data[i].dist &gt; h.data[j].dist
+}</span>
+
+func (h *MaxHeap) Len() int <span class="cov8" title="1">{
+        return len(h.data)
+}</span>
+
+func (h *MaxHeap) swap(i, j int) <span class="cov8" title="1">{
+        h.data[i], h.data[j] = h.data[j], h.data[i]
+}</span>
+
+// -------------------- heapify --------------------
+
+func (h *MaxHeap) heapifyUp(i int) <span class="cov8" title="1">{
+        for i &gt; 0 </span><span class="cov8" title="1">{
+                parent := (i - 1) / 2
+                if !h.less(i, parent) </span><span class="cov8" title="1">{
+                        break</span>
+                }
+                <span class="cov8" title="1">h.swap(i, parent)
+                i = parent</span>
+        }
+}
+
+func (h *MaxHeap) heapifyDown(i int) <span class="cov8" title="1">{
+        n := len(h.data)
+
+        for </span><span class="cov8" title="1">{
+                left := 2*i + 1
+                right := 2*i + 2
+                largest := i
+
+                if left &lt; n &amp;&amp; h.less(left, largest) </span><span class="cov0" title="0">{
+                        largest = left
+                }</span>
+                <span class="cov8" title="1">if right &lt; n &amp;&amp; h.less(right, largest) </span><span class="cov0" title="0">{
+                        largest = right
+                }</span>
+                <span class="cov8" title="1">if largest == i </span><span class="cov8" title="1">{
+                        break</span>
+                }
+
+                <span class="cov0" title="0">h.swap(i, largest)
+                i = largest</span>
+        }
+}
+
+// -------------------- heap ops --------------------
+
+func (h *MaxHeap) push(c Candidate) <span class="cov8" title="1">{
+        h.data = append(h.data, c)
+        h.heapifyUp(len(h.data) - 1)
+}</span>
+
+func (h *MaxHeap) pop() Candidate <span class="cov8" title="1">{
+        top := h.data[0]
+
+        last := len(h.data) - 1
+        h.data[0] = h.data[last]
+        h.data = h.data[:last]
+
+        if len(h.data) &gt; 0 </span><span class="cov8" title="1">{
+                h.heapifyDown(0)
+        }</span>
+
+        <span class="cov8" title="1">return top</span>
+}
+
+func (h *MaxHeap) top() Candidate <span class="cov0" title="0">{
+        return h.data[0]
+}</span>
+
+// =========================================================
+// SEARCH (EF CANDIDATE POOL VERSION)
+// =========================================================
+
+func (g *Graph) GenerateCandidatePool(query []float32) ([]Candidate, error) <span class="cov8" title="1">{
+
+        // -------------------- VALIDATE --------------------
+        if g.Size == 0 </span><span class="cov0" title="0">{
+                return nil, errors.New("empty graph")
+        }</span>
+
+        <span class="cov8" title="1">if len(query) != g.Dimension </span><span class="cov0" title="0">{
+                return nil, errors.New("dimension mismatch")
+        }</span>
+
+        // =====================================================
+        // PHASE 1: GREEDY ROUTING (find entry region)
+        // =====================================================
+
+        <span class="cov8" title="1">current := g.EntryPoint
+
+        level := g.EntryPointLevel
+        if level &gt;= g.MaxLevels </span><span class="cov0" title="0">{
+                level = g.MaxLevels - 1
+        }</span>
+
+        <span class="cov8" title="1">for l := level; l &gt;= 0; l-- </span><span class="cov8" title="1">{
+                next, err := g.GreedyTraverseLayer(current, query, l)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">current = next</span>
+        }
+
+        <span class="cov8" title="1">start := current
+
+        // =====================================================
+        // PHASE 2: EF SEARCH
+        // =====================================================
+
+        visited := make([]bool, g.Capacity+1)
+
+        dist := func(a int) float32 </span><span class="cov8" title="1">{
+                d, _ := EuclideanDistance(g.GetVector(a), query)
+                return d
+        }</span>
+
+        // frontier (heap)
+        <span class="cov8" title="1">heap := &amp;MaxHeap{
+                data: make([]Candidate, 0, EF),
+        }
+
+        // result set (true EF output)
+        results := make([]Candidate, 0, EF)
+
+        // -------------------- init --------------------
+        startCand := Candidate{start, dist(start)}
+
+        heap.push(startCand)
+        results = append(results, startCand)
+        visited[start] = true
+
+        // =====================================================
+        // EXPLORE
+        // =====================================================
+
+        for heap.Len() &gt; 0 </span><span class="cov8" title="1">{
+
+                curr := heap.pop()
+
+                // expand neighbors
+                neighbors := g.GetNeighbors(curr.id, 0)
+
+                for _, nb := range neighbors </span><span class="cov8" title="1">{
+
+                        if nb == 0 || visited[nb] </span><span class="cov8" title="1">{
+                                continue</span>
+                        }
+
+                        <span class="cov8" title="1">visited[nb] = true
+
+                        d := dist(nb)
+                        c := Candidate{id: nb, dist: d}
+
+                        // -------------------- push to frontier --------------------
+                        if heap.Len() &lt; EF </span><span class="cov8" title="1">{
+                                heap.push(c)
+                        }</span> else<span class="cov0" title="0"> if d &lt; heap.top().dist </span><span class="cov0" title="0">{
+                                heap.pop()
+                                heap.push(c)
+                        }</span>
+
+                        // -------------------- maintain EF result set --------------------
+                        <span class="cov8" title="1">results = append(results, c)
+
+                        if len(results) &gt; EF </span><span class="cov0" title="0">{
+
+                                // remove worst from results (linear scan, OK for EF=64)
+                                worst := 0
+                                for i := 1; i &lt; len(results); i++ </span><span class="cov0" title="0">{
+                                        if results[i].dist &gt; results[worst].dist </span><span class="cov0" title="0">{
+                                                worst = i
+                                        }</span>
+                                }
+
+                                <span class="cov0" title="0">results[worst] = results[len(results)-1]
+                                results = results[:len(results)-1]</span>
+                        }
+                }
+        }
+
+        <span class="cov8" title="1">return results, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package vectorengine
+
+import "fmt"
+
+func EuclideanDistance(a []float32, b []float32) (float32, error) <span class="cov8" title="1">{
+        if len(a) != len(b) </span><span class="cov8" title="1">{
+                return 0, fmt.Errorf("vectors must have same dimension")
+        }</span>
+
+        <span class="cov8" title="1">var sum float32
+
+        for i := 0; i &lt; len(a); i++ </span><span class="cov8" title="1">{
+                diff := a[i] - b[i]
+                sum += diff * diff
+        }</span>
+
+        <span class="cov8" title="1">return sum, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package vectorengine
+
+import (
+        "errors"
+        "sort"
+)
+
+// =========================================================
+// INSERT USING EF CANDIDATE POOL
+// GRAPH DEGREE = g.K (no separate M)
+// =========================================================
+
+func (g *Graph) Insert(vec []float32) (int, error) <span class="cov8" title="1">{
+
+        // -------------------- VALIDATE --------------------
+        if len(vec) != g.Dimension </span><span class="cov0" title="0">{
+                return -1, errors.New("dimension mismatch")
+        }</span>
+
+        <span class="cov8" title="1">if g.K &lt;= 0 </span><span class="cov0" title="0">{
+                return -1, errors.New("invalid graph degree K")
+        }</span>
+
+        // -------------------- ASSIGN NODE ID --------------------
+        <span class="cov8" title="1">g.Size++
+        newID := g.Size
+
+        if newID &gt; g.Capacity </span><span class="cov0" title="0">{
+                return -1, errors.New("capacity exceeded")
+        }</span>
+
+        // -------------------- STORE VECTOR --------------------
+        <span class="cov8" title="1">g.SetVector(newID, vec)
+
+        // -------------------- FIRST NODE --------------------
+        if g.Size == 1 </span><span class="cov8" title="1">{
+                g.EntryPoint = newID
+                g.EntryPointLevel = 0
+                return newID, nil
+        }</span>
+
+        // =====================================================
+        // STEP 1: GET EF CANDIDATE POOL
+        // =====================================================
+
+        <span class="cov8" title="1">pool, err := g.GenerateCandidatePool(vec)
+        if err != nil </span><span class="cov0" title="0">{
+                return -1, err
+        }</span>
+
+        <span class="cov8" title="1">if len(pool) == 0 </span><span class="cov0" title="0">{
+                return -1, errors.New("empty candidate pool")
+        }</span>
+
+        // =====================================================
+        // STEP 2: SORT BY DISTANCE (BEST FIRST)
+        // =====================================================
+
+        <span class="cov8" title="1">sort.Slice(pool, func(i, j int) bool </span><span class="cov8" title="1">{
+                return pool[i].dist &lt; pool[j].dist
+        }</span>)
+
+        // =====================================================
+        // STEP 3: SELECT TOP K NEIGHBORS (GRAPH DEGREE)
+        // =====================================================
+
+        <span class="cov8" title="1">k := g.K
+        if k &gt; len(pool) </span><span class="cov8" title="1">{
+                k = len(pool)
+        }</span>
+
+        // =====================================================
+        // STEP 4: CONNECT GRAPH (BIDIRECTIONAL)
+        // =====================================================
+
+        <span class="cov8" title="1">for i := 0; i &lt; k; i++ </span><span class="cov8" title="1">{
+                nb := pool[i]
+
+                // new → neighbor
+                g.AddNeighbor(newID, nb.id, 0)
+
+                // neighbor → new
+                g.AddNeighbor(nb.id, newID, 0)
+        }</span>
+
+        // =====================================================
+        // STEP 5: UPDATE ENTRY POINT (simple heuristic)
+        // =====================================================
+
+        <span class="cov8" title="1">if pool[0].id != 0 </span><span class="cov8" title="1">{
+                g.EntryPoint = pool[0].id
+        }</span>
+
+        <span class="cov8" title="1">return newID, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package vectorengine
+
+import (
+        "errors"
+        "sort"
+)
+
+// =========================================================
+// SEARCH TOP-K USING EF CANDIDATE POOL
+// =========================================================
+
+func (g *Graph) SearchTopK(query []float32, k int) ([]Candidate, error) <span class="cov8" title="1">{
+
+        // -------------------- VALIDATE --------------------
+        if g.Size == 0 </span><span class="cov8" title="1">{
+                return nil, errors.New("empty graph")
+        }</span>
+
+        <span class="cov8" title="1">if len(query) != g.Dimension </span><span class="cov8" title="1">{
+                return nil, errors.New("dimension mismatch")
+        }</span>
+
+        <span class="cov8" title="1">if k &lt;= 0 </span><span class="cov8" title="1">{
+                return nil, errors.New("invalid k")
+        }</span>
+
+        // =====================================================
+        // STEP 1: GET EF CANDIDATE POOL
+        // =====================================================
+
+        <span class="cov8" title="1">pool, err := g.GenerateCandidatePool(query)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">if len(pool) == 0 </span><span class="cov0" title="0">{
+                return nil, errors.New("empty candidate pool")
+        }</span>
+
+        // =====================================================
+        // STEP 2: SORT BY DISTANCE (best first)
+        // =====================================================
+
+        <span class="cov8" title="1">sort.Slice(pool, func(i, j int) bool </span><span class="cov8" title="1">{
+                return pool[i].dist &lt; pool[j].dist
+        }</span>)
+
+        // =====================================================
+        // STEP 3: RETURN TOP-K
+        // =====================================================
+
+        <span class="cov8" title="1">if k &gt; len(pool) </span><span class="cov8" title="1">{
+                k = len(pool)
+        }</span>
+
+        <span class="cov8" title="1">return pool[:k], nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package vectorengine
+
+import (
+        "errors"
+        "math"
+        "math/rand/v2"
+)
+
+type Graph struct {
+        Vectors   []float32 // flat: N * Dimension
+        Neighbors []int     // flat: N * K * MaxLevels
+
+        K         int
+        Dimension int
+        Capacity  int
+        Size      int
+        MaxLevels int
+
+        EntryPoint      int // starting node
+        EntryPointLevel int // highest level of entry node
+}
+
+// -------------------- INIT --------------------
+
+func NewGraphStore(dim int, k int, maxNodes int) *Graph <span class="cov8" title="1">{
+
+        maxLevels := int(math.Log(float64(maxNodes))) + 1
+
+        return &amp;Graph{
+                Vectors:   make([]float32, (maxNodes+1)*dim),
+                Neighbors: make([]int, (maxNodes+1)*k*maxLevels),
+
+                K:         k,
+                Dimension: dim,
+                Capacity:  maxNodes,
+                Size:      0,
+                MaxLevels: maxLevels,
+
+                EntryPoint:      1,
+                EntryPointLevel: 0,
+        }
+}</span>
+
+// -------------------- VECTOR OPS --------------------
+
+func (g *Graph) GetVector(id int) []float32 <span class="cov8" title="1">{
+        start := id * g.Dimension
+        return g.Vectors[start : start+g.Dimension]
+}</span>
+
+func (g *Graph) SetVector(id int, vec []float32) <span class="cov8" title="1">{
+        start := id * g.Dimension
+        copy(g.Vectors[start:start+g.Dimension], vec)
+}</span>
+
+// -------------------- INDEXING CORE --------------------
+
+func (g *Graph) getIndex(nodeIndex int, layer int) int <span class="cov8" title="1">{
+        return layer*g.Capacity*g.K + nodeIndex*g.K
+}</span>
+
+func (g *Graph) getIndexSafe(nodeIndex int, layer int) (int, error) <span class="cov8" title="1">{
+
+        if nodeIndex &lt;= 0 || nodeIndex &gt; g.Capacity </span><span class="cov8" title="1">{
+                return -1, errors.New("node index out of range")
+        }</span>
+
+        <span class="cov8" title="1">if layer &lt; 0 || layer &gt;= g.MaxLevels </span><span class="cov8" title="1">{
+                return -1, errors.New("layer out of range")
+        }</span>
+
+        <span class="cov8" title="1">return g.getIndex(nodeIndex, layer), nil</span>
+}
+
+// -------------------- SAFE NEIGHBOR ACCESS --------------------
+
+func (g *Graph) GetNeighborValue(nodeIndex int, layer int, offset int) (int, error) <span class="cov8" title="1">{
+
+        if nodeIndex &lt;= 0 || nodeIndex &gt; g.Capacity </span><span class="cov8" title="1">{
+                return -1, errors.New("node index out of range")
+        }</span>
+
+        <span class="cov8" title="1">if layer &lt; 0 || layer &gt;= g.MaxLevels </span><span class="cov0" title="0">{
+                return -1, errors.New("layer out of range")
+        }</span>
+
+        <span class="cov8" title="1">if offset &lt; 0 || offset &gt;= g.K </span><span class="cov8" title="1">{
+                return -1, errors.New("offset out of range")
+        }</span>
+
+        <span class="cov8" title="1">start := g.getIndex(nodeIndex, layer)
+
+        if start+offset &lt; 0 || start+offset &gt;= len(g.Neighbors) </span><span class="cov0" title="0">{
+                return -1, errors.New("computed index out of bounds")
+        }</span>
+
+        <span class="cov8" title="1">val := g.Neighbors[start+offset]
+
+        if val == 0 </span><span class="cov8" title="1">{
+                return -1, errors.New("no neighbor exists at this position")
+        }</span>
+
+        <span class="cov8" title="1">return val, nil</span>
+}
+
+// -------------------- NEIGHBORS --------------------
+
+func (g *Graph) GetNeighbors(id int, layer int) []int <span class="cov8" title="1">{
+        start := g.getIndex(id, layer)
+        return g.Neighbors[start : start+g.K]
+}</span>
+
+func (g *Graph) AddNeighbor(id int, neighbor int, layer int) <span class="cov8" title="1">{
+        start := g.getIndex(id, layer)
+
+        for i := 0; i &lt; g.K; i++ </span><span class="cov8" title="1">{
+                if g.Neighbors[start+i] == 0 </span><span class="cov8" title="1">{
+                        g.Neighbors[start+i] = neighbor
+                        return
+                }</span>
+        }
+}
+
+// -------------------- LAYER GENERATION --------------------
+
+func (g *Graph) GenerateRandomLayer() int <span class="cov8" title="1">{
+        level := 0
+
+        for rand.Float64() &lt; 0.5 </span><span class="cov8" title="1">{
+                level++
+        }</span>
+
+        <span class="cov8" title="1">if level &gt;= g.MaxLevels </span><span class="cov8" title="1">{
+                level = g.MaxLevels - 1
+        }</span>
+
+        <span class="cov8" title="1">return level</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package vectorengine
+
+func (g *Graph) GreedyTraverseLayer(nodeIndex int, query []float32, layer int) (int, error) <span class="cov8" title="1">{
+
+        // start node
+        current := nodeIndex
+
+        currentVec := g.GetVector(current)
+        bestDist, err := EuclideanDistance(currentVec, query)
+        if err != nil </span><span class="cov8" title="1">{
+                return -1, err
+        }</span>
+
+        <span class="cov8" title="1">for </span><span class="cov8" title="1">{
+                improved := false
+                bestCandidate := current
+                bestCandidateDist := bestDist
+
+                // get neighbors of CURRENT NODE (NOT flat array index)
+                neighbors := g.GetNeighbors(current, layer)
+
+                for _, nb := range neighbors </span><span class="cov8" title="1">{
+                        if nb == 0 </span><span class="cov8" title="1">{
+                                continue</span>
+                        }
+
+                        <span class="cov8" title="1">nbVec := g.GetVector(nb)
+
+                        dist, err := EuclideanDistance(nbVec, query)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return -1, err
+                        }</span>
+
+                        <span class="cov8" title="1">if dist &lt; bestCandidateDist </span><span class="cov8" title="1">{
+                                bestCandidateDist = dist
+                                bestCandidate = nb
+                                improved = true
+                        }</span>
+                }
+
+                // if no improvement → stop
+                <span class="cov8" title="1">if !improved </span><span class="cov8" title="1">{
+                        return current, nil
+                }</span>
+
+                // move to better node
+                <span class="cov8" title="1">current = bestCandidate
+                bestDist = bestCandidateDist</span>
+        }
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
