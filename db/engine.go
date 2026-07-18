@@ -1,7 +1,6 @@
 package db
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 )
@@ -43,7 +42,7 @@ func (e *VectorEngine) Insert(vec []float32) {
 
 	// Transition trigger
 	if len(e.RawVectors) >= e.Threshold {
-		fmt.Printf("Threshold of %d reached. Building IVF Index...\n", e.Threshold)
+		// fmt.Printf("Threshold of %d reached. Building IVF Index...\n", e.Threshold)
 		e.buildIndex()
 	}
 }
@@ -104,7 +103,7 @@ func (e *VectorEngine) buildIndex() {
 
 		// Convergence Check
 		if maxShift < tolerance {
-			fmt.Printf("Lloyd's Algorithm converged after %d iterations.\n", iter+1)
+			// fmt.Printf("Lloyd's Algorithm converged after %d iterations.\n", iter+1)
 			break
 		}
 	}
@@ -119,5 +118,5 @@ func (e *VectorEngine) buildIndex() {
 	// STEP 4: Memory Cleanup
 	e.RawVectors = nil // Free the heap memory used during warmup
 	e.Phase = PhaseIndexed
-	fmt.Println("Index frozen. Engine is now in PhaseIndexed.")
+	// fmt.Println("Index frozen. Engine is now in PhaseIndexed.")
 }

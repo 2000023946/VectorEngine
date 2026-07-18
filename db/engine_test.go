@@ -13,10 +13,11 @@ import (
 // ==========================================
 
 func TestVectorEngine_InsertAndSearch(t *testing.T) {
-	// 1. Initialize our engine with a threshold of 10
-	engine := NewVectorEngine(10)
+	// 1. Initialize our engine with a threshold of 3
+	// This ensures the index builds on the 3rd insert!
+	engine := NewVectorEngine(3)
 
-	// 2. Insert test data (Using raw float slices based on our new API)
+	// 2. Insert test data
 	pointA := []float32{1.0, 1.0, 1.0}
 	pointB := []float32{5.0, 5.0, 5.0}
 	pointC := []float32{10.0, 10.0, 10.0}
@@ -25,16 +26,16 @@ func TestVectorEngine_InsertAndSearch(t *testing.T) {
 	engine.Insert(pointB)
 	engine.Insert(pointC)
 
-	// Verify insertion count (Since threshold is 10, data is still in Phase 1: RawVectors)
-	if len(engine.RawVectors) != 3 {
-		t.Errorf("Expected 3 vectors in engine, got %d", len(engine.RawVectors))
+	// Verify the state machine actually transitioned
+	if engine.Phase != PhaseIndexed {
+		t.Fatalf("Engine failed to transition to PhaseIndexed. Current phase: %v", engine.Phase)
 	}
 
 	// 3. Perform a Search query
 	// This point is closest to pointB (5,5,5)
 	query := []float32{4.5, 4.5, 4.5}
 
-	// Ask for the closest match (our new API returns top 1 and distance)
+	// Ask for the closest match
 	result, dist := engine.Search(query)
 
 	// 4. Validate Accuracy
