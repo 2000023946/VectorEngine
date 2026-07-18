@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -11,50 +12,34 @@ import (
 // ACCURACY TESTS
 // ==========================================
 
-func TestEngine_InsertAndSearch(t *testing.T) {
-	// 1. Initialize an engine for 3D vectors (e.g., simple X,Y,Z for testing)
-	engine := NewEngine(10, 3)
+func TestVectorEngine_InsertAndSearch(t *testing.T) {
+	// 1. Initialize our engine with a threshold of 10
+	engine := NewVectorEngine(10)
 
-	// 2. Insert test data
-	testData := []Vector{
-		{ID: "point_A", Data: []float32{1.0, 1.0, 1.0}},
-		{ID: "point_B", Data: []float32{5.0, 5.0, 5.0}},
-		{ID: "point_C", Data: []float32{10.0, 10.0, 10.0}},
-	}
+	// 2. Insert test data (Using raw float slices based on our new API)
+	pointA := []float32{1.0, 1.0, 1.0}
+	pointB := []float32{5.0, 5.0, 5.0}
+	pointC := []float32{10.0, 10.0, 10.0}
 
-	for _, v := range testData {
-		err := engine.Insert(v)
-		if err != nil {
-			t.Fatalf("Failed to insert vector %s: %v", v.ID, err)
-		}
-	}
+	engine.Insert(pointA)
+	engine.Insert(pointB)
+	engine.Insert(pointC)
 
-	// Verify insertion count
-	if engine.Count() != 3 {
-		t.Errorf("Expected 3 vectors in engine, got %d", engine.Count())
+	// Verify insertion count (Since threshold is 10, data is still in Phase 1: RawVectors)
+	if len(engine.RawVectors) != 3 {
+		t.Errorf("Expected 3 vectors in engine, got %d", len(engine.RawVectors))
 	}
 
 	// 3. Perform a Search query
-	// This point is closest to point_B (5,5,5)
+	// This point is closest to pointB (5,5,5)
 	query := []float32{4.5, 4.5, 4.5}
 
-	// Ask for the top 2 closest matches
-	results, err := engine.Search(query, 2)
-	if err != nil {
-		t.Fatalf("Search failed: %v", err)
-	}
+	// Ask for the closest match (our new API returns top 1 and distance)
+	result, dist := engine.Search(query)
 
 	// 4. Validate Accuracy
-	if len(results) != 2 {
-		t.Errorf("Expected 2 results, got %d", len(results))
-	}
-
-	if results[0].Vector.ID != "point_B" {
-		t.Errorf("Expected closest match to be point_B, got %s", results[0].Vector.ID)
-	}
-
-	if results[1].Vector.ID != "point_A" {
-		t.Errorf("Expected second match to be point_A, got %s", results[1].Vector.ID)
+	if !reflect.DeepEqual(result, pointB) {
+		t.Errorf("Expected closest match to be %v, got %v (Distance: %f)", pointB, result, dist)
 	}
 }
 
@@ -62,9 +47,11 @@ func TestEngine_InsertAndSearch(t *testing.T) {
 // BENCHMARK TESTS
 // ==========================================
 
-// generateDummyEngine fills the DB with random vectors to simulate hardware data
+// generateDummyEngine fills the DB with random vectors
 func generateDummyEngine(size int, dim int) *VectorEngine {
-	engine := NewEngine(size, dim)
+	// By setting threshold exactly equal to size, the very last
+	// insert in this loop will trigger buildIndex() automatically!
+	engine := NewVectorEngine(size)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for i := 0; i < size; i++ {
@@ -73,25 +60,21 @@ func generateDummyEngine(size int, dim int) *VectorEngine {
 			// Random float between 0 and 100
 			data[j] = rng.Float32() * 100.0
 		}
-
-		engine.Insert(Vector{
-			ID:   fmt.Sprintf("vec_%d", i),
-			Data: data,
-		})
+		engine.Insert(data)
 	}
+
 	return engine
 }
 
-// BenchmarkEngine_Search_BruteForce measures the latency of your O(N) scan
-func BenchmarkEngine_Search_BruteForce(b *testing.B) {
+// BenchmarkEngine_Search measures the latency of your cache-friendly bucket scan
+func BenchmarkEngine_Search(b *testing.B) {
 	// Setup: 30-dimensional vectors (e.g., 10 historical readings of X,Y,Z)
 	dim := 30
 
-	// Test against different dataset sizes to prove O(N) scaling
+	// Test against different dataset sizes to prove O(1) routing + bucket scanning
 	sizes := []int{1000, 10000, 50000}
 
 	for _, size := range sizes {
-		// b.Run creates sub-benchmarks for each dataset size
 		b.Run(fmt.Sprintf("Dataset_%d", size), func(b *testing.B) {
 
 			// 1. Pre-load the database before starting the timer
@@ -103,16 +86,13 @@ func BenchmarkEngine_Search_BruteForce(b *testing.B) {
 				query[j] = 50.0
 			}
 
-			// 3. Reset the timer so ingestion time isn't counted in the benchmark
+			// 3. Reset the timer so ingestion/indexing time isn't counted
 			b.ResetTimer()
 
-			// 4. The actual benchmark loop [1]
+			// 4. The actual benchmark loop
 			for i := 0; i < b.N; i++ {
-				// We search for the Top 10 closest matches
-				_, err := engine.Search(query, 10)
-				if err != nil {
-					b.Fatalf("Search failed during benchmark: %v", err)
-				}
+				// We search for the closest match
+				engine.Search(query)
 			}
 		})
 	}

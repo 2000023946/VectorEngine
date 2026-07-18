@@ -1,50 +1,123 @@
 package db
 
 import (
-	"errors"
-	"sync"
-	"time"
+	"fmt"
+	"math"
+	"math/rand"
 )
 
-// Vector represents a single motion window from the DE10-Lite
-type Vector struct {
-	ID        string
-	Timestamp time.Time
-	Data      []float32 // Explicit float32 to cut memory footprint in half
-}
+type Phase int
 
-// VectorEngine is the in-memory database
+const (
+	PhaseWarmup Phase = iota
+	PhaseIndexed
+)
+
 type VectorEngine struct {
-	mu      sync.RWMutex // Protects concurrent API reads/writes
-	vectors []Vector
-	dim     int // Dimensionality of the vector (e.g., 30 for 10x(X,Y,Z))
+	Phase      Phase
+	Threshold  int
+	RawVectors [][]float32   // Phase 1: Flat list for O(N) append
+	Centroids  [][]float32   // Phase 2: Frozen routing points
+	Buckets    [][][]float32 // Phase 2: Contiguous memory blocks
 }
 
-// NewEngine initializes the DB with a pre-allocated capacity
-func NewEngine(capacity int, dimensions int) *VectorEngine {
+func NewVectorEngine(threshold int) *VectorEngine {
 	return &VectorEngine{
-		// Pre-allocate the slice to prevent expensive dynamic resizing
-		vectors: make([]Vector, 0, capacity),
-		dim:     dimensions,
+		Phase:     PhaseWarmup,
+		Threshold: threshold,
 	}
 }
 
-// Insert safely adds a new vector to the engine
-func (e *VectorEngine) Insert(v Vector) error {
-	if len(v.Data) != e.dim {
-		return errors.New("vector dimension mismatch")
+// Insert handles routing data based on the current phase
+func (e *VectorEngine) Insert(vec []float32) {
+	if e.Phase == PhaseIndexed {
+		// FAST PATH: Route to nearest centroid in O(K)
+		cIdx := e.findNearestCentroid(vec)
+		// Append to contiguous slice in memory
+		e.Buckets[cIdx] = append(e.Buckets[cIdx], vec)
+		return
 	}
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	// WARMUP PATH: Flat append
+	e.RawVectors = append(e.RawVectors, vec)
 
-	e.vectors = append(e.vectors, v)
-	return nil
+	// Transition trigger
+	if len(e.RawVectors) >= e.Threshold {
+		fmt.Printf("Threshold of %d reached. Building IVF Index...\n", e.Threshold)
+		e.buildIndex()
+	}
 }
 
-// Count returns the current number of stored vectors
-func (e *VectorEngine) Count() int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return len(e.vectors)
+// buildIndex executes Random Initialization and Lloyd's Algorithm
+func (e *VectorEngine) buildIndex() {
+	N := len(e.RawVectors)
+	K := int(math.Sqrt(float64(N)))
+	dim := len(e.RawVectors[0])
+
+	// STEP 1: Random Initialization (Forgy Method)
+	e.Centroids = make([][]float32, K)
+	perm := rand.Perm(N)
+	for i := 0; i < K; i++ {
+		e.Centroids[i] = append([]float32(nil), e.RawVectors[perm[i]]...) // Deep copy
+	}
+
+	// STEP 2: Lloyd's Algorithm (Batch Update)
+	maxIterations := 20
+	tolerance := float32(1e-5) // Convergence threshold
+
+	for iter := 0; iter < maxIterations; iter++ {
+		// Global Assignment: Create temporary buckets
+		tempBuckets := make([][][]float32, K)
+		for _, vec := range e.RawVectors {
+			cIdx := e.findNearestCentroid(vec)
+			tempBuckets[cIdx] = append(tempBuckets[cIdx], vec)
+		}
+
+		// Global Update: Calculate new means
+		maxShift := float32(0.0)
+		for i := 0; i < K; i++ {
+			if len(tempBuckets[i]) == 0 {
+				continue // Skip empty buckets
+			}
+
+			newCentroid := make([]float32, dim)
+			for _, vec := range tempBuckets[i] {
+				for d := 0; d < dim; d++ {
+					newCentroid[d] += vec[d]
+				}
+			}
+
+			// Calculate the mathematical average
+			for d := 0; d < dim; d++ {
+				newCentroid[d] /= float32(len(tempBuckets[i]))
+			}
+
+			// Track how far this centroid moved
+			shift := euclideanSq(e.Centroids[i], newCentroid)
+			if shift > maxShift {
+				maxShift = shift
+			}
+
+			// Update centroid position
+			e.Centroids[i] = newCentroid
+		}
+
+		// Convergence Check
+		if maxShift < tolerance {
+			fmt.Printf("Lloyd's Algorithm converged after %d iterations.\n", iter+1)
+			break
+		}
+	}
+
+	// STEP 3: Freeze the Index
+	e.Buckets = make([][][]float32, K)
+	for _, vec := range e.RawVectors {
+		cIdx := e.findNearestCentroid(vec)
+		e.Buckets[cIdx] = append(e.Buckets[cIdx], vec)
+	}
+
+	// STEP 4: Memory Cleanup
+	e.RawVectors = nil // Free the heap memory used during warmup
+	e.Phase = PhaseIndexed
+	fmt.Println("Index frozen. Engine is now in PhaseIndexed.")
 }
