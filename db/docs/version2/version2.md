@@ -1,5 +1,3 @@
-
-
 ## Vector Engine V2: Architecture & Performance Review
 
 This release introduces a high-performance Inverted File (IVF) vector index, replacing the Phase 1 brute-force scan. The architecture is specifically optimized for hardware-level cache efficiency and high-throughput ingestion.
