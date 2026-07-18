@@ -8,6 +8,10 @@ import grpc
 import vectordb_pb2
 import vectordb_pb2_grpc
 
+
+from fastapi.middleware.cors import CORSMiddleware
+
+
 # Global dictionary to hold our gRPC stub
 grpc_client = {}
 
@@ -22,6 +26,14 @@ async def lifespan(app: FastAPI):
     channel.close()
 
 app = FastAPI(title="Vector DB API Gateway", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Or specify ["http://localhost:5173"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Pydantic model ensures incoming JSON has the correct shape
 class VectorInput(BaseModel):
