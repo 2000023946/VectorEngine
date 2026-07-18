@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package vectordb;
+
+// Tells the compiler where to put the generated Go files
+option go_package = "./pb";
+
+// The gRPC service definition
+service VectorService {
+  // Streams a single vector into the engine
+  rpc Insert (InsertRequest) returns (InsertResponse);
+  
+  // Queries the engine and returns the nearest neighbor
+  rpc Search (SearchRequest) returns (SearchResponse);
+}
+
+message InsertRequest {
+  repeated float vector = 1; // 'repeated float' maps to Go's []float32
+}
+
+message InsertResponse {
+  bool success = 1;
+}
+
+message SearchRequest {
+  repeated float query = 1;
+}
+
+message SearchResponse {
+  repeated float nearest_vector = 1;
+  float distance = 2;
+}
