@@ -18,3 +18,32 @@ entity spi_reader is
   );
 end spi_reader;
 
+architecture rtl of spi_reader is
+
+  signal count       : integer   := 0;
+  signal spi_clk_reg : std_logic := '0';
+
+begin
+
+  process (clk)
+  begin
+
+    if rising_edge(clk) then
+
+      if count = 24 then
+
+        spi_clk_reg <= not spi_clk_reg;
+        count       <= 0;
+
+      else
+
+        count <= count + 1;
+
+      end if;
+
+    end if;
+
+  end process;
+  spi_clk <= spi_clk_reg;
+
+end rtl;
