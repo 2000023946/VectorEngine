@@ -1,0 +1,76 @@
+# ==================================================
+# DE10-Lite Pin Assignments
+# Top Level: system.vhdl
+# ==================================================
+
+
+# --------------------------
+# 50 MHz FPGA Clock
+# --------------------------
+set_location_assignment PIN_P11 -to clk
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to clk
+
+
+
+# --------------------------
+# LEDs
+# leds[7:0]
+# --------------------------
+
+set_location_assignment PIN_A8  -to leds[0]
+set_location_assignment PIN_A9  -to leds[1]
+set_location_assignment PIN_A10 -to leds[2]
+set_location_assignment PIN_B10 -to leds[3]
+set_location_assignment PIN_D13 -to leds[4]
+set_location_assignment PIN_C13 -to leds[5]
+set_location_assignment PIN_E14 -to leds[6]
+set_location_assignment PIN_D14 -to leds[7]
+
+
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to leds[*]
+
+
+
+# --------------------------
+# User Switch / Button
+# --------------------------
+
+# SW0 -> start
+set_location_assignment PIN_C10 -to start
+
+# KEY0 -> reset
+set_location_assignment PIN_B8 -to reset
+
+
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to start
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to reset
+
+
+
+# ==================================================
+# ADXL345 Accelerometer
+# ==================================================
+
+# SPI MOSI
+# FPGA -> Sensor
+set_location_assignment PIN_V11 -to spi_mosi
+
+
+# SPI MISO
+# Sensor -> FPGA
+set_location_assignment PIN_V12 -to spi_miso
+
+
+# SPI Chip Select
+set_location_assignment PIN_AB16 -to spi_cs
+
+
+# SPI Clock
+set_location_assignment PIN_AB15 -to spi_clk
+
+
+
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to spi_mosi
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to spi_miso
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to spi_cs
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to spi_clk
