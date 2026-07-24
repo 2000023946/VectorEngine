@@ -50,6 +50,16 @@ begin
 
         done <= '0';
 
+      elsif load = '1' then
+
+        tx_reg <= tx_data;
+
+        rx_reg <= (others => '0');
+
+        bit_count <= 0;
+
+        done <= '0';
+
       end if;
 
     end if;
