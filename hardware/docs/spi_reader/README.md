@@ -1,666 +1,160 @@
-Good. Let's design the **SPI accelerometer reader module** like you would in a real FPGA system. Think of this module as having two sides:
+## SPI Reader Module Description
 
-1. **External interface (API)** → how the rest of the FPGA talks to it
-2. **Internal implementation** → the state machine that actually generates SPI transactions
+The `spi_reader` is the top-level module that controls communication between the FPGA and an accelerometer sensor using the SPI protocol. It is built from three smaller modules: a clock divider, an FSM controller, and a shift register.
+
+### 1. SPI Clock Divider
+
+The FPGA runs at a high-frequency clock, but the sensor requires a slower SPI clock. The clock divider reduces the FPGA clock frequency and generates the `spi_clk` signal used by the SPI bus.
+
+```
+FPGA Clock
+     |
+     v
+Clock Divider
+     |
+     v
+SPI Clock
+```
+
+The generated SPI clock is shared with both the FSM and shift register so all SPI operations happen at the correct timing.
 
 ---
 
-# 1. SPI Reader Module API
+### 2. SPI FSM Controller
 
-The SPI reader's job is:
+The FSM controls the order of the SPI transaction. It does not move data; it only decides what operation should happen.
 
-> "Whenever I need acceleration data, communicate with the sensor, receive the bytes, and output a clean digital value."
-
-The rest of your FPGA should **not care about SPI timing**. It should just see:
-
-* request data
-* wait
-* receive data
-
----
-
-## External API
-
-A clean interface:
-
-```vhdl
-entity spi_accel_reader is
-    port(
-        -- FPGA clock
-        clk          : in  std_logic;
-        reset        : in  std_logic;
-
-        -- Control Interface
-        start        : in  std_logic;
-        busy         : out std_logic;
-        data_ready   : out std_logic;
-
-        -- Sensor Data
-        accel_x      : out std_logic_vector(15 downto 0);
-        accel_y      : out std_logic_vector(15 downto 0);
-        accel_z      : out std_logic_vector(15 downto 0);
-
-        -- SPI Physical Interface
-        spi_cs       : out std_logic;
-        spi_clk      : out std_logic;
-        spi_mosi     : out std_logic;
-        spi_miso     : in  std_logic
-    );
-end spi_accel_reader;
-```
-
----
-
-Now let's break down each signal.
-
----
-
-# Control Interface
-
-## `start`
-
-Input from your controller.
-
-Meaning:
-
-> "Go read the accelerometer now."
-
-Example:
-
-```
-start = 1
-```
-
-The SPI module begins a transaction.
-
-You pulse this:
-
-```
-      ______
-_____|      |_____
-     start
-```
-
-Not held high forever.
-
----
-
-## `busy`
-
-Output.
-
-Means:
-
-> "I am currently talking to the sensor."
-
-Example:
-
-```
-start
- |
- v
-
-busy:
-____████████____
-```
-
-While busy:
-
-* do not send another request
-* ignore start
-
----
-
-## `data_ready`
-
-Output.
-
-Means:
-
-> "The new acceleration values are available."
-
-Example:
-
-```
-busy:
-
-████████
-
-data_ready:
-
-        _
-_______| |_____
-```
-
-A single clock pulse.
-
----
-
-## Sensor Data
-
-```
-accel_x
-accel_y
-accel_z
-```
-
-Example:
-
-```
-X = 0x01AF
-Y = 0xFF20
-Z = 0x03A0
-```
-
-These are the values you push into your FIFO.
-
----
-
-# SPI Physical Interface
-
-Now the actual SPI wires.
-
-## CS (Chip Select)
-
-Tells the sensor:
-
-> "I am talking to you."
-
-Normally:
-
-```
-Idle:
-
-CS = 1
-```
-
-Transaction:
-
-```
-CS = 0
-```
-
-Example:
-
-```
-CS
-
-____
-    |________________|
-```
-
----
-
-## SPI Clock
-
-The FPGA generates the clock.
-
-Example:
-
-```
-spi_clk
-
-___     ___     ___
-   |___|   |___|
-```
-
-Each edge transfers one bit.
-
----
-
-## MOSI
-
-Master Out Slave In.
-
-FPGA → Sensor.
-
-Used for:
-
-* register address
-* read command
-
-Example:
-
-```
-FPGA sends:
-
-10100001
-```
-
----
-
-## MISO
-
-Master In Slave Out.
-
-Sensor → FPGA.
-
-Used for:
-
-* sensor data
-
-Example:
-
-```
-Sensor sends:
-
-00011010
-```
-
----
-
-# 2. SPI Transaction
-
-Let's say the accelerometer uses:
-
-```
-Register 0x32 = X-axis low byte
-Register 0x33 = X-axis high byte
-```
-
-A read operation looks like:
-
-```
-CS LOW
-
-FPGA -> Sensor
-
-[READ COMMAND]
-[REGISTER ADDRESS]
-
-Sensor -> FPGA
-
-[DATA BYTE]
-
-CS HIGH
-```
-
-Physically:
-
-```
-        CS
-        |
-________|----------------
-
-MOSI:
-
-READ
-10110010
-REGISTER
-00110010
-
-
-MISO:
-
-xxxxxxxx
-00011100
-```
-
----
-
-# 3. Internal Architecture
-
-Inside the module:
-
-```
-             start
-               |
-               v
-        +--------------+
-        | Control FSM |
-        +--------------+
-               |
-               |
-        +--------------+
-        | SPI Shift    |
-        | Register     |
-        +--------------+
-               |
-               |
-        +--------------+
-        | Clock        |
-        | Divider      |
-        +--------------+
-               |
-               |
-          SPI Pins
-```
-
-You mainly need:
-
-1. FSM
-2. Clock divider
-3. Shift registers
-
----
-
-# Clock Divider
-
-Your FPGA might run:
-
-```
-50 MHz
-```
-
-But SPI might need:
-
-```
-1 MHz
-```
-
-So:
-
-```
-50 MHz FPGA clock
-
-        |
-        v
-
-divide by 50
-
-        |
-        v
-
-1 MHz SPI clock
-```
-
-Implementation:
-
-```vhdl
-if counter = DIVIDER then
-    spi_clk <= not spi_clk;
-end if;
-```
-
----
-
-# 4. State Machine
-
-The FSM controls the entire transaction.
-
-Something like:
+The sequence is:
 
 ```
 IDLE
+ |
+ | start = 1
+ v
+ASSERT_CS
+ |
+ v
+LOAD_COMMAND
+ |
+ v
+SEND_COMMAND
+ |
+ v
+LOAD_ADDRESS
+ |
+ v
+SEND_ADDRESS
+ |
+ v
+RECEIVE_DATA
+ |
+ v
+FINISH
+```
 
+During each state, the FSM controls:
+
+* `spi_cs` → selects the sensor
+* `load` → tells the shift register to load a byte
+* `shift_enable` → tells the shift register to transfer bits
+* `done` → tells the FSM when 8 bits have been transferred
+
+---
+
+### 3. SPI Shift Register
+
+The shift register performs the actual SPI communication.
+
+It handles:
+
+* Sending data through `spi_mosi`
+* Receiving data through `spi_miso`
+
+When the FSM sends:
+
+```
+load = 1
+```
+
+the shift register loads the command/address byte.
+
+When the FSM sends:
+
+```
+shift_enable = 1
+```
+
+the shift register moves one bit:
+
+```
+TX Register:
+
+10110010
+
+   |
+   v
+
+Send first bit through MOSI
+```
+
+At the same time, it receives one bit from the sensor:
+
+```
+MISO --> RX Register
+```
+
+After 8 SPI clock cycles:
+
+```
+done = 1
+```
+
+is sent back to the FSM.
+
+---
+
+## Complete Data Flow
+
+The full transaction works like this:
+
+```
+FPGA
  |
  | start
  v
 
-ASSERT_CS
-
+SPI FSM
  |
+ | load command
  v
 
-SEND_COMMAND
-
+Shift Register
  |
+ | MOSI
  v
 
-SEND_ADDRESS
-
+Accelerometer
  |
+ | MISO
  v
 
-READ_DATA
-
+Shift Register
  |
+ | rx_data
  v
 
-STORE_RESULT
-
- |
- v
-
-DEASSERT_CS
-
- |
- v
-
-DONE
-
- |
- v
-
-IDLE
+spi_reader output
 ```
 
 ---
 
-# State 1: IDLE
-
-Waiting.
-
-Outputs:
-
-```
-CS = 1
-busy = 0
-data_ready = 0
-```
-
-Nothing happens.
-
----
-
-# State 2: ASSERT_CS
-
-When:
-
-```
-start = 1
-```
-
-Move here.
-
-Actions:
-
-```
-CS = 0
-busy = 1
-```
-
-Now sensor listens.
-
----
-
-# State 3: SEND_COMMAND
-
-Load shift register:
-
-```
-10110000
-```
-
-Example:
-
-```
-Read command
-```
-
-Then shift:
-
-```
-bit 7
- |
- v
-
-10110000
-
- ^
- |
- MOSI
-```
-
-Every SPI clock:
-
-```
-shift left
-```
-
----
-
-# State 4: SEND_ADDRESS
-
-Example:
-
-Need register:
-
-```
-0x32
-```
-
-Load:
-
-```
-00110010
-```
-
-Shift out.
-
----
-
-# State 5: READ_DATA
-
-Now sensor sends data.
-
-FPGA samples MISO.
-
-Example:
-
-Clock edges:
-
-```
-SPI CLK:
-
-_|-|_|-|_|-|_
-
-MISO:
-
-1 0 1 0 1 1 0 0
-```
-
-Shift into register:
-
-```
-received <= received & miso
-```
-
-After 8 clocks:
-
-```
-10101100
-```
-
----
-
-# State 6: STORE_RESULT
-
-Save:
-
-```
-accel_x <= received_data;
-```
-
----
-
-# State 7: DONE
-
-Generate pulse:
-
-```
-data_ready = 1
-```
-
-Tell FIFO:
-
-> "New sample available."
-
-Then return:
-
-```
-IDLE
-```
-
----
-
-# Full Timing Example
-
-```
-start
- |
- |
- v
-
-CS     ______|----------------|_____
-
-CLK       _-_-_-_-_-_-_-_-_
-
-MOSI      CMD ADDRESS
-
-MISO              DATA DATA DATA
-
-
-busy   ____|----------------|____
-
-
-ready                    _
-________________________| |____
-```
-
----
-
-# How it connects to FIFO later
-
-Your SPI module becomes a producer:
-
-```
-SPI MODULE
-
-accel_x
-accel_y
-accel_z
-    |
-    |
-data_ready
-    |
-    v
-
-FIFO WRITE ENABLE
-```
-
-The FIFO doesn't know SPI exists.
-
-It only sees:
-
-```
-write_enable = data_ready
-write_data = accel packet
-```
-
----
-
-So conceptually:
-
-**SPI module = hardware driver**
-
-API:
-
-```
-start  ---> "read sensor"
-busy    ---> "I'm working"
-ready   ---> "data available"
-data    ---> "here is acceleration"
-```
-
-Internally:
-
-```
-FSM controls:
-    CS
-    MOSI
-    CLK
-    MISO sampling
-```
-
-This is exactly the type of abstraction you want in FPGA design: the outside sees a simple software-like API, while the inside handles the ugly timing.
+## Module Responsibilities
+
+| Module               | Responsibility                    |
+| -------------------- | --------------------------------- |
+| `spi_clock_divider`  | Creates slower SPI clock          |
+| `spi_fsm`            | Controls SPI transaction sequence |
+| `spi_shift_register` | Sends and receives bits           |
+| `spi_reader`         | Connects all modules together     |
+
+The final `spi_reader` acts as a complete SPI controller. The rest of the FPGA design only needs to provide `start` and read `data_out`; the SPI communication is handled internally.

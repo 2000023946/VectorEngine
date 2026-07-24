@@ -1,237 +1,306 @@
-The **SPI shift register** is the part that actually moves the bits. The FSM tells it **when** to send or receive, but the shift register handles **how the bits move one at a time**.
+The **SPI shift register** is the part that actually moves the bits between the FPGA and the accelerometer.
 
-Remember, SPI does not send a full byte at once. It sends:
+The FSM is the "manager" telling it what to do, but the shift register is the "worker" that physically sends and receives bits.
+
+Its job is:
+
+1. Store the byte we want to send (`tx_reg`)
+2. Send one bit at a time through MOSI
+3. Receive one bit at a time through MISO
+4. Store the received byte (`rx_reg`)
+
+---
+
+## Main signals
+
+Your shift register has:
+
+```vhdl
+load
+shift_enable
+tx_data
+spi_miso
+spi_mosi
+rx_data
+done
+```
+
+### `load`
+
+The FSM uses this when it wants to put a new byte into the transmit register.
+
+Example:
+
+```text
+FSM:
+load = 1
+tx_data = 10110010
+```
+
+The shift register does:
 
 ```
-1 clock cycle = 1 bit transferred
+tx_reg = 10110010
 ```
 
-So if you want to send:
+Now it is ready to send.
 
-```
-10110010
-```
+---
 
-you need 8 SPI clock cycles.
+### `shift_enable`
+
+This tells the shift register:
+
+> "Move one bit now."
+
+Every SPI clock while `shift_enable = 1`, it does one transfer.
 
 ---
 
 ## Transmitting data (MOSI)
 
-The FPGA wants to send a command or register address to the sensor.
-
-Example:
+Suppose:
 
 ```
-Command = 10110010
+tx_reg = 10110010
 ```
 
-First, load it into the transmit shift register:
+SPI sends the **leftmost bit first**.
+
+The first bit:
 
 ```
-TX Register:
-
-[1][0][1][1][0][0][1][0]
+10110010
+^
+|
+send this bit
 ```
 
-Then every SPI clock:
-
-### Clock 1
-
-Output the first bit:
+So:
 
 ```
 MOSI = 1
 ```
 
-Shift:
-
-```
-[0][1][1][0][0][1][0][x]
-```
-
----
-
-### Clock 2
-
-Output:
-
-```
-MOSI = 0
-```
-
-Shift again.
-
----
-
-This repeats until all 8 bits are sent.
-
-After 8 clocks:
+Then the register shifts:
 
 ```
 10110010
+ |
+ v
+
+01100100
 ```
 
-has completely reached the sensor.
+Next clock:
+
+```
+01100100
+ ^
+ |
+ send 0
+```
+
+Continue:
+
+```
+10110010
+01100100
+11001000
+10010000
+00100000
+01000000
+10000000
+00000000
+```
+
+After 8 clocks, the whole byte has been transmitted.
 
 ---
 
 ## Receiving data (MISO)
 
-Now the sensor sends data back.
+At the same time, SPI is full duplex.
+
+While you send a bit:
+
+```
+FPGA --------------> Sensor
+       MOSI
+```
+
+the sensor sends a bit back:
+
+```
+FPGA <-------------- Sensor
+       MISO
+```
+
+Your code:
+
+```vhdl
+rx_reg <= rx_reg(6 downto 0) & spi_miso;
+```
+
+means:
+
+"Shift everything left and put the new incoming bit on the right."
 
 Example:
 
-Sensor sends:
+Starting:
 
 ```
-01010101
+rx_reg = 00000000
 ```
 
-Every SPI clock, the FPGA samples MISO.
+Receive:
 
+```
+1
+```
+
+becomes:
+
+```
+00000001
+```
+
+Receive:
+
+```
+0
+```
+
+becomes:
+
+```
+00000010
+```
+
+Receive:
+
+```
+1
+```
+
+becomes:
+
+```
+00000101
+```
+
+After 8 bits:
+
+```
+rx_reg = sensor data
+```
+
+---
+
+## Bit counter
+
+You have:
+
+```vhdl
+signal bit_count : integer range 0 to 7;
+```
+
+This counts how many bits have moved.
+
+Example:
+
+```
+Clock 1 -> bit_count = 0
+Clock 2 -> bit_count = 1
+Clock 3 -> bit_count = 2
+...
+Clock 8 -> bit_count = 7
+```
+
+When:
+
+```vhdl
+bit_count = 7
+```
+
+the byte is complete:
+
+```vhdl
+done <= '1';
+```
+
+The FSM sees:
+
+```
+done = 1
+```
+
+and moves to the next state.
+
+---
+
+## Full operation example
+
+The FSM says:
+
+```
+LOAD_COMMAND
+```
+
+Shift register:
+
+```
+tx_reg = 10110010
+```
+
+Then FSM says:
+
+```
+SEND_COMMAND
+shift_enable = 1
+```
+
+The shift register does:
+
+```
 Clock 1:
-
-```
-MISO = 0
-```
-
-Store it.
+MOSI = 1
 
 Clock 2:
+MOSI = 0
+
+Clock 3:
+MOSI = 1
+
+...
+
+Clock 8:
+MOSI = 0
+```
+
+At the same time:
 
 ```
-MISO = 1
+MISO bits -> rx_reg
 ```
-
-Store it.
 
 After 8 clocks:
 
 ```
-RX Register:
-
-[0][1][0][1][0][1][0][1]
-```
-
-Now:
-
-```
-data_out = 01010101
+done = 1
 ```
 
 ---
 
-## How it connects to the FSM
-
-The FSM controls the shift register.
-
-Example:
+So the simple way to remember:
 
 ```
-FSM State              Shift Register
+FSM = decides WHAT happens
 
-IDLE                   Do nothing
+Shift Register = moves the bits
 
-SEND_COMMAND           Load command
-                       Shift bits to MOSI
-
-SEND_ADDRESS           Load address
-                       Shift bits to MOSI
-
-RECEIVE_DATA           Shift bits from MISO
-                       Store received data
-
-FINISH                 Output complete byte
+Clock Divider = decides WHEN bits move
 ```
 
----
-
-## Signals the shift register needs
-
-It will probably have:
-
-### Inputs
-
-`tx_data`
-
-The byte we want to send.
-
-Example:
-
-```
-10110010
-```
-
----
-
-`load`
-
-Tells it:
-
-> "Put this new byte into the register."
-
----
-
-`shift_enable`
-
-Tells it:
-
-> "SPI clock happened, move one bit."
-
----
-
-`miso`
-
-The bit coming from the sensor.
-
----
-
-### Outputs
-
-`mosi`
-
-The bit going to the sensor.
-
----
-
-`rx_data`
-
-The completed received byte.
-
----
-
-`done`
-
-Tells the FSM:
-
-> "I shifted 8 bits, the byte is complete."
-
----
-
-The important design idea:
-
-* **FSM = brain** → decides the operation order.
-* **Shift register = hands** → moves the bits.
-* **Clock divider = heartbeat** → provides the timing.
-
-Together:
-
-```
-Clock Divider
-      |
-      v
-   SPI Clock
-      |
-      v
-     FSM
-      |
-      v
-Shift Register
-      |
-      +---- MOSI ---> Sensor
-      |
-      +<--- MISO ---- Sensor
-```
-
-The next step is designing the `spi_shift_register.vhd` entity interface so it can connect cleanly to your FSM.
+The shift register is basically the bridge between the FPGA's internal parallel data (`10110010`) and SPI's serial data line (one bit at a time).
