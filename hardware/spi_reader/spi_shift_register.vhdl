@@ -32,8 +32,7 @@ architecture rtl of spi_shift_register is
   signal tx_reg : std_logic_vector(7 downto 0);
   signal rx_reg : std_logic_vector(7 downto 0);
 
-  signal bit_count : integer range 0 to 7 := 0;
-
+  signal bit_count : integer range 0 to 8 := 0;
 begin
 
   process (clk)
@@ -72,6 +71,16 @@ begin
 
       -- Count transferred bits
       bit_count <= bit_count + 1;
+
+      if bit_count = 8 then
+
+        done <= '1';
+
+      else
+
+        done <= '0';
+
+      end if;
 
     end if;
 
