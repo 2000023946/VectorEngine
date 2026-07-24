@@ -85,35 +85,25 @@ begin
   end process;
 
   process (state)
-
   begin
+    -- Default assignments
     spi_start <= '0';
 
-    spi_tx_data <= (others => '0');
+    -- ALWAYS output the Read command (Bit 7 = 1, Address = 0x00)
+    spi_tx_data <= "10000000";
 
     done <= '0';
 
     case state is
-
       when IDLE =>
-
         null;
-
       when SEND_ADDRESS =>
-        -- ADXL345 Device ID register
-
         spi_start <= '1';
-
-        spi_tx_data <= "00000000";
-
+        -- Removed spi_tx_data from here since it's set globally above
       when WAIT_SPI =>
-
         null;
-
       when FINISH =>
-
         done <= '1';
-
     end case;
   end process;
 
