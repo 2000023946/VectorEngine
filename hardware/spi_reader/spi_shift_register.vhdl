@@ -62,6 +62,19 @@ begin
 
       end if;
 
+    elsif shift_enable = '1' then
+
+      -- Receive one bit
+      rx_reg <= rx_reg(6 downto 0) & spi_miso;
+
+      -- Shift transmit register
+      tx_reg <= tx_reg(6 downto 0) & '0';
+
+      -- Count transferred bits
+      bit_count <= bit_count + 1;
+
     end if;
 
-  end process;
+  end if;
+
+end process;
