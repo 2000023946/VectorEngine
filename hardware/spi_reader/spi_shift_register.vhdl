@@ -1,6 +1,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
+
 entity spi_shift_register is
   port (
 
@@ -27,19 +28,28 @@ entity spi_shift_register is
   );
 end spi_shift_register;
 
+
+
 architecture rtl of spi_shift_register is
+
 
   signal tx_reg : std_logic_vector(7 downto 0);
   signal rx_reg : std_logic_vector(7 downto 0);
 
-  signal bit_count : integer range 0 to 8 := 0;
+  signal bit_count : integer range 0 to 7 := 0;
+
+
 begin
 
-  process (clk)
+
+  process(clk)
+
   begin
 
     if rising_edge(clk) then
 
+
+      -- Reset
       if reset = '1' then
 
         tx_reg <= (others => '0');
@@ -49,6 +59,8 @@ begin
 
         done <= '0';
 
+
+      -- Load new transmit byte
       elsif load = '1' then
 
         tx_reg <= tx_data;
@@ -59,31 +71,58 @@ begin
 
         done <= '0';
 
-      end if;
 
-    elsif shift_enable = '1' then
+      -- Shift one bit
+      elsif shift_enable = '1' then
 
-      -- Receive one bit
-      rx_reg <= rx_reg(6 downto 0) & spi_miso;
 
-      -- Shift transmit register
-      tx_reg <= tx_reg(6 downto 0) & '0';
+        -- Receive bit from sensor
+        rx_reg <= rx_reg(6 downto 0) & spi_miso;
 
-      -- Count transferred bits
-      bit_count <= bit_count + 1;
 
-      if bit_count = 8 then
+        -- Shift transmit register
+        tx_reg <= tx_reg(6 downto 0) & '0';
 
-        done <= '1';
+
+        -- Check if 8 bits transferred
+        if bit_count = 7 then
+
+          done <= '1';
+
+          bit_count <= 0;
+
+
+        else
+
+          bit_count <= bit_count + 1;
+
+          done <= '0';
+
+        end if;
+
 
       else
 
+        -- Keep done low when idle
         done <= '0';
 
       end if;
 
+
     end if;
 
-  end if;
 
-end process;
+  end process;
+
+
+
+  -- Output current transmit bit
+  spi_mosi <= tx_reg(7);
+
+
+  -- Output received byte
+  rx_data <= rx_reg;
+
+
+
+end rtl;
