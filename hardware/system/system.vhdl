@@ -4,7 +4,7 @@ use ieee.std_logic_1164.all;
 entity system is
   port (
     clk      : in std_logic;
-    reset    : in std_logic;
+    resetn    : in std_logic;
     start    : in std_logic;
     leds     : out std_logic_vector(7 downto 0);
     spi_cs   : out std_logic;
@@ -32,7 +32,7 @@ begin
     port map
     (
       clk        => clk,
-      reset      => reset,
+      resetn      => resetn,
       system_clk => slow_clk_signal
     );
 
@@ -41,7 +41,7 @@ begin
     port map
     (
       clk         => slow_clk_signal,  -- Changed to slow_clk_signal
-      reset       => reset,
+      resetn       => resetn,
       start       => start,
       spi_start   => spi_start_signal,
       spi_tx_data => spi_tx_data_signal,
@@ -56,7 +56,7 @@ begin
     port map
     (
       clk      => slow_clk_signal,  -- Changed to slow_clk_signal
-      reset    => reset,
+      resetn    => resetn,
       start    => spi_start_signal,
       tx_data  => spi_tx_data_signal,
       busy     => open,

@@ -2,8 +2,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 entity system_clk_divider is
   port (
-    clk   : in std_logic;
-    reset : in std_logic;
+    clk    : in std_logic;
+    resetn : in std_logic;
 
     system_clk : out std_logic
   );
@@ -21,7 +21,7 @@ begin
 
     if rising_edge(clk) then
 
-      if reset = '1' then
+      if resetn = '0' then
 
         count          <= 0;
         system_clk_reg <= '0';

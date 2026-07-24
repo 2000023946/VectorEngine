@@ -5,7 +5,7 @@ entity accelerometer_controller is
   port (
 
     clk   : in std_logic;
-    reset : in std_logic;
+    resetn : in std_logic;
 
     start : in std_logic;
     -- SPI Reader interface
@@ -46,7 +46,7 @@ begin
   begin
 
     if rising_edge(clk) then
-      if reset = '1' then
+      if resetn = '0' then
 
         state <= IDLE;
 

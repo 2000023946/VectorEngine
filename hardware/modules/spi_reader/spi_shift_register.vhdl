@@ -6,7 +6,7 @@ entity spi_shift_register is
   port (
 
     clk   : in std_logic;
-    reset : in std_logic;
+    resetn : in std_logic;
 
     -- Control
     load         : in std_logic;
@@ -46,11 +46,11 @@ begin
 
   begin
 
-    if rising_edge(clk) then
+    if falling_edge(clk) then
 
 
-      -- Reset
-      if reset = '1' then
+      -- resetn
+      if resetn = '0' then
 
         tx_reg <= (others => '0');
         rx_reg <= (others => '0');

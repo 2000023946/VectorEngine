@@ -4,7 +4,7 @@ use ieee.std_logic_1164.all;
 entity spi_reader is
   port (
     clk      : in std_logic;
-    reset    : in std_logic;
+    resetn   : in std_logic;
     start    : in std_logic;
     tx_data  : in std_logic_vector(7 downto 0);
     busy     : out std_logic;
@@ -51,7 +51,7 @@ begin
     port map
     (
       clk          => clk, -- Using the incoming slow clock
-      reset        => reset,
+      resetn       => resetn,
       start        => start,
       spi_cs       => spi_cs,
       busy         => busy,
@@ -68,7 +68,7 @@ begin
     port map
     (
       clk          => clk, -- Using the incoming slow clock
-      reset        => reset,
+      resetn       => resetn,
       load         => load_signal,
       shift_enable => shift_enable_signal,
       tx_data      => tx_data,
