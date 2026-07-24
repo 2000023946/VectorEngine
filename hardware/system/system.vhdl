@@ -4,44 +4,33 @@ entity system is
 
   port (
 
-    -- FPGA clock
     clk   : in std_logic;
     reset : in std_logic;
-    -- Start reading sensor
-    start : in std_logic;
-    -- Debug output
-    device_id : out std_logic_vector(7 downto 0);
-    done      : out std_logic;
-    -- SPI pins to ADXL345
+
+    start    : in std_logic;
+    leds     : out std_logic_vector(7 downto 0);
     spi_cs   : out std_logic;
     spi_clk  : out std_logic;
     spi_mosi : out std_logic;
     spi_miso : in std_logic
-
   );
 
 end system;
 
 architecture rtl of system is
-  ------------------------------------------------
-  -- Signals between accelerometer controller
-  -- and SPI reader
-  ------------------------------------------------
-
   signal spi_start_signal : std_logic;
 
   signal spi_ready_signal : std_logic;
+
   signal spi_tx_data_signal :
   std_logic_vector(7 downto 0);
+
   signal spi_rx_data_signal :
+  std_logic_vector(7 downto 0);
+  signal device_id_signal :
   std_logic_vector(7 downto 0);
 
 begin
-
-  ------------------------------------------------
-  -- Accelerometer Controller
-  ------------------------------------------------
-
   accel_controller : entity work.accelerometer_controller
 
     port map
@@ -51,19 +40,18 @@ begin
 
       reset => reset,
 
-      start       => start,
-      spi_start   => spi_start_signal,
+      start     => start,
+      spi_start => spi_start_signal,
+
       spi_tx_data => spi_tx_data_signal,
       spi_ready   => spi_ready_signal,
+
       spi_rx_data => spi_rx_data_signal,
-      device_id   => device_id,
-      done        => done
+      device_id   => device_id_signal,
+
+      done => open
 
     );
-
-  ------------------------------------------------
-  -- SPI Reader
-  ------------------------------------------------
 
   spi : entity work.spi_reader
 
@@ -72,10 +60,9 @@ begin
 
       clk => clk,
 
-      reset => reset,
-      start => spi_start_signal,
-      busy  => open,
-
+      reset    => reset,
+      start    => spi_start_signal,
+      busy     => open,
       ready    => spi_ready_signal,
       data_out => spi_rx_data_signal,
       spi_cs   => spi_cs,
@@ -88,4 +75,5 @@ begin
 
     );
 
+  leds <= device_id_signal;
 end rtl;
