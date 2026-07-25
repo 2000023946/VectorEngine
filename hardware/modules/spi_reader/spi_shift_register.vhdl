@@ -4,7 +4,7 @@ use ieee.std_logic_1164.all;
 entity spi_shift_register is
   port (
     clk          : in std_logic;
-    reset        : in std_logic;
+    resetn       : in std_logic;
     load         : in std_logic;
     shift_enable : in std_logic;
     tx_data      : in std_logic_vector(7 downto 0);
@@ -27,8 +27,8 @@ begin
   process(clk)
   begin
     if rising_edge(clk) then
-      -- 1. Synchronous Reset
-      if reset = '1' then
+      -- 1. Synchronous Active-Low Reset
+      if resetn = '0' then
         tx_reg    <= (others => '0');
         rx_reg    <= (others => '0');
         bit_count <= 0;
