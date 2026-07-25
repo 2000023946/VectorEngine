@@ -23,21 +23,31 @@ architecture rtl of spi_shift_register is
 
 begin
 
-  -- Process 1: Transmit (MOSI) and Control on the RISING edge
+  -- Single RISING edge process ensures perfect Quartus synthesis
   process(clk)
   begin
     if rising_edge(clk) then
+      -- 1. Synchronous Reset
       if reset = '1' then
         tx_reg    <= (others => '0');
+        rx_reg    <= (others => '0');
         bit_count <= 0;
         done      <= '0';
+        
+      -- 2. Load Phase
       elsif load = '1' then
         tx_reg    <= tx_data;
+        rx_reg    <= (others => '0');
         bit_count <= 0;
         done      <= '0';
-      elsif shift_enable = '1' then
-        tx_reg <= tx_reg(6 downto 0) & '0';
         
+      -- 3. Shift Phase
+      elsif shift_enable = '1' then
+        -- Shift out (MOSI) and capture in (MISO) simultaneously
+        tx_reg <= tx_reg(6 downto 0) & '0';
+        rx_reg <= rx_reg(6 downto 0) & spi_miso;
+        
+        -- Track the 8 bits
         if bit_count = 7 then
           done      <= '1';
           bit_count <= 0;
@@ -45,26 +55,15 @@ begin
           bit_count <= bit_count + 1;
           done      <= '0';
         end if;
+        
+      -- 4. Idle Phase
       else
         done <= '0';
       end if;
     end if;
   end process;
 
-  -- Process 2: Receive (MISO) on the FALLING edge
-  process(clk)
-  begin
-    if falling_edge(clk) then
-      if reset = '1' then
-        rx_reg <= (others => '0');
-      -- Only sample data when we are actively shifting
-      elsif shift_enable = '1' then
-        rx_reg <= rx_reg(6 downto 0) & spi_miso;
-      end if;
-    end if;
-  end process;
-
-  -- Continuous assignments
+  -- Continuous assignments mapping internal registers to output ports
   spi_mosi <= tx_reg(7);
   rx_data  <= rx_reg;
 
