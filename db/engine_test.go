@@ -25,17 +25,17 @@ func TestVectorEngine_InsertAndSearch(t *testing.T) {
 	engine.Insert(pointB)
 	engine.Insert(pointC)
 
-	// WAIT FOR GOROUTINE: Give the background worker time to pull
-	// from the queue and run buildIndex()
-	time.Sleep(100 * time.Millisecond)
+	// WAIT FOR GOROUTINE: Poll the engine state until the background
+	// worker officially transitions it to PhaseIndexed.
+	for {
+		engine.mu.RLock()
+		phase := engine.Phase
+		engine.mu.RUnlock()
 
-	// Verify the state machine actually transitioned
-	engine.mu.RLock()
-	phase := engine.Phase
-	engine.mu.RUnlock()
-
-	if phase != PhaseIndexed {
-		t.Fatalf("Engine failed to transition to PhaseIndexed. Current phase: %v", phase)
+		if phase == PhaseIndexed {
+			break // Math is done, exit the loop!
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// 3. Perform a Search query
@@ -69,9 +69,20 @@ func generateDummyEngine(size int, dim int) *VectorEngine {
 		engine.Insert(data)
 	}
 
-	// WAIT FOR GOROUTINE: Give the background worker a moment to execute
-	// Lloyd's algorithm on the full dataset before the benchmark starts
-	time.Sleep(500 * time.Millisecond)
+	// WAIT FOR GOROUTINE: Poll the engine state until the background
+	// worker officially transitions it to PhaseIndexed.
+	for {
+		engine.mu.RLock()
+		phase := engine.Phase
+		engine.mu.RUnlock()
+
+		if phase == PhaseIndexed {
+			break // The math is done! Exit the wait loop.
+		}
+
+		// Sleep for just 10ms before checking again so we don't fry the CPU
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	return engine
 }
