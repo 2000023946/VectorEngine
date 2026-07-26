@@ -12,6 +12,9 @@ service VectorService {
   
   // Queries the engine and returns the nearest neighbor
   rpc Search (SearchRequest) returns (SearchResponse);
+
+  // Fetches the current number of vectors stored on the node
+  rpc GetStats (StatsRequest) returns (StatsResponse);
 }
 
 message InsertRequest {
@@ -29,4 +32,12 @@ message SearchRequest {
 message SearchResponse {
   repeated float nearest_vector = 1;
   float distance = 2;
+}
+
+// Request to fetch node statistics (empty because we just need to trigger it)
+message StatsRequest {}
+
+// Response containing the size of the node's vector database
+message StatsResponse {
+  int64 count = 1;
 }

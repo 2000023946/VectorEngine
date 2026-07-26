@@ -160,11 +160,21 @@ func (e *VectorEngine) buildIndex() {
 		buckets[cIdx] = append(buckets[cIdx], vec)
 	}
 
-	// STEP 4: Lock briefly to swap state and enter PhaseIndexed
+	// STEP 4: Lock briefly to swap state, catching ghost inserts
 	e.mu.Lock()
+
+	// Rescue any vectors appended to RawVectors while the math was running
+	if len(e.RawVectors) > len(rawCopy) {
+		missedVectors := e.RawVectors[len(rawCopy):]
+		for _, vec := range missedVectors {
+			cIdx := findNearestInCentroids(vec, centroids)
+			buckets[cIdx] = append(buckets[cIdx], vec)
+		}
+	}
+
 	e.Centroids = centroids
 	e.Buckets = buckets
-	e.RawVectors = nil // Free memory used during warmup
+	e.RawVectors = nil // Now it is safe to free memory
 	e.Phase = PhaseIndexed
 	e.mu.Unlock()
 }
@@ -214,4 +224,17 @@ func euclideanSq(a, b []float32) float32 {
 		sum += diff * diff
 	}
 	return sum
+}
+func (e *VectorEngine) Size() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if e.Phase == PhaseIndexed {
+		total := 0
+		for _, bucket := range e.Buckets {
+			total += len(bucket)
+		}
+		return total
+	}
+	return len(e.RawVectors)
 }

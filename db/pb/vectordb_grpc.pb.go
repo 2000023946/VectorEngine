@@ -19,8 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	VectorService_Insert_FullMethodName = "/vectordb.VectorService/Insert"
-	VectorService_Search_FullMethodName = "/vectordb.VectorService/Search"
+	VectorService_Insert_FullMethodName   = "/vectordb.VectorService/Insert"
+	VectorService_Search_FullMethodName   = "/vectordb.VectorService/Search"
+	VectorService_GetStats_FullMethodName = "/vectordb.VectorService/GetStats"
 )
 
 // VectorServiceClient is the client API for VectorService service.
@@ -33,6 +34,8 @@ type VectorServiceClient interface {
 	Insert(ctx context.Context, in *InsertRequest, opts ...grpc.CallOption) (*InsertResponse, error)
 	// Queries the engine and returns the nearest neighbor
 	Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error)
+	// Fetches the current number of vectors stored on the node
+	GetStats(ctx context.Context, in *StatsRequest, opts ...grpc.CallOption) (*StatsResponse, error)
 }
 
 type vectorServiceClient struct {
@@ -63,6 +66,16 @@ func (c *vectorServiceClient) Search(ctx context.Context, in *SearchRequest, opt
 	return out, nil
 }
 
+func (c *vectorServiceClient) GetStats(ctx context.Context, in *StatsRequest, opts ...grpc.CallOption) (*StatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatsResponse)
+	err := c.cc.Invoke(ctx, VectorService_GetStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VectorServiceServer is the server API for VectorService service.
 // All implementations must embed UnimplementedVectorServiceServer
 // for forward compatibility.
@@ -73,6 +86,8 @@ type VectorServiceServer interface {
 	Insert(context.Context, *InsertRequest) (*InsertResponse, error)
 	// Queries the engine and returns the nearest neighbor
 	Search(context.Context, *SearchRequest) (*SearchResponse, error)
+	// Fetches the current number of vectors stored on the node
+	GetStats(context.Context, *StatsRequest) (*StatsResponse, error)
 	mustEmbedUnimplementedVectorServiceServer()
 }
 
@@ -88,6 +103,9 @@ func (UnimplementedVectorServiceServer) Insert(context.Context, *InsertRequest) 
 }
 func (UnimplementedVectorServiceServer) Search(context.Context, *SearchRequest) (*SearchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Search not implemented")
+}
+func (UnimplementedVectorServiceServer) GetStats(context.Context, *StatsRequest) (*StatsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetStats not implemented")
 }
 func (UnimplementedVectorServiceServer) mustEmbedUnimplementedVectorServiceServer() {}
 func (UnimplementedVectorServiceServer) testEmbeddedByValue()                       {}
@@ -146,6 +164,24 @@ func _VectorService_Search_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VectorService_GetStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VectorServiceServer).GetStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VectorService_GetStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VectorServiceServer).GetStats(ctx, req.(*StatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VectorService_ServiceDesc is the grpc.ServiceDesc for VectorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -160,6 +196,10 @@ var VectorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Search",
 			Handler:    _VectorService_Search_Handler,
+		},
+		{
+			MethodName: "GetStats",
+			Handler:    _VectorService_GetStats_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

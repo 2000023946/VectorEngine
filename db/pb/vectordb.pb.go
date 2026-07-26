@@ -205,6 +205,88 @@ func (x *SearchResponse) GetDistance() float32 {
 	return 0
 }
 
+// Request to fetch node statistics (empty because we just need to trigger it)
+type StatsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StatsRequest) Reset() {
+	*x = StatsRequest{}
+	mi := &file_pb_vectordb_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatsRequest) ProtoMessage() {}
+
+func (x *StatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_vectordb_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatsRequest.ProtoReflect.Descriptor instead.
+func (*StatsRequest) Descriptor() ([]byte, []int) {
+	return file_pb_vectordb_proto_rawDescGZIP(), []int{4}
+}
+
+// Response containing the size of the node's vector database
+type StatsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Count         int64                  `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StatsResponse) Reset() {
+	*x = StatsResponse{}
+	mi := &file_pb_vectordb_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatsResponse) ProtoMessage() {}
+
+func (x *StatsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_vectordb_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatsResponse.ProtoReflect.Descriptor instead.
+func (*StatsResponse) Descriptor() ([]byte, []int) {
+	return file_pb_vectordb_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *StatsResponse) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
 var File_pb_vectordb_proto protoreflect.FileDescriptor
 
 const file_pb_vectordb_proto_rawDesc = "" +
@@ -218,10 +300,14 @@ const file_pb_vectordb_proto_rawDesc = "" +
 	"\x05query\x18\x01 \x03(\x02R\x05query\"S\n" +
 	"\x0eSearchResponse\x12%\n" +
 	"\x0enearest_vector\x18\x01 \x03(\x02R\rnearestVector\x12\x1a\n" +
-	"\bdistance\x18\x02 \x01(\x02R\bdistance2\x89\x01\n" +
+	"\bdistance\x18\x02 \x01(\x02R\bdistance\"\x0e\n" +
+	"\fStatsRequest\"%\n" +
+	"\rStatsResponse\x12\x14\n" +
+	"\x05count\x18\x01 \x01(\x03R\x05count2\xc6\x01\n" +
 	"\rVectorService\x12;\n" +
 	"\x06Insert\x12\x17.vectordb.InsertRequest\x1a\x18.vectordb.InsertResponse\x12;\n" +
-	"\x06Search\x12\x17.vectordb.SearchRequest\x1a\x18.vectordb.SearchResponseB\x06Z\x04./pbb\x06proto3"
+	"\x06Search\x12\x17.vectordb.SearchRequest\x1a\x18.vectordb.SearchResponse\x12;\n" +
+	"\bGetStats\x12\x16.vectordb.StatsRequest\x1a\x17.vectordb.StatsResponseB\x06Z\x04./pbb\x06proto3"
 
 var (
 	file_pb_vectordb_proto_rawDescOnce sync.Once
@@ -235,20 +321,24 @@ func file_pb_vectordb_proto_rawDescGZIP() []byte {
 	return file_pb_vectordb_proto_rawDescData
 }
 
-var file_pb_vectordb_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_pb_vectordb_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_pb_vectordb_proto_goTypes = []any{
 	(*InsertRequest)(nil),  // 0: vectordb.InsertRequest
 	(*InsertResponse)(nil), // 1: vectordb.InsertResponse
 	(*SearchRequest)(nil),  // 2: vectordb.SearchRequest
 	(*SearchResponse)(nil), // 3: vectordb.SearchResponse
+	(*StatsRequest)(nil),   // 4: vectordb.StatsRequest
+	(*StatsResponse)(nil),  // 5: vectordb.StatsResponse
 }
 var file_pb_vectordb_proto_depIdxs = []int32{
 	0, // 0: vectordb.VectorService.Insert:input_type -> vectordb.InsertRequest
 	2, // 1: vectordb.VectorService.Search:input_type -> vectordb.SearchRequest
-	1, // 2: vectordb.VectorService.Insert:output_type -> vectordb.InsertResponse
-	3, // 3: vectordb.VectorService.Search:output_type -> vectordb.SearchResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 2: vectordb.VectorService.GetStats:input_type -> vectordb.StatsRequest
+	1, // 3: vectordb.VectorService.Insert:output_type -> vectordb.InsertResponse
+	3, // 4: vectordb.VectorService.Search:output_type -> vectordb.SearchResponse
+	5, // 5: vectordb.VectorService.GetStats:output_type -> vectordb.StatsResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -265,7 +355,7 @@ func file_pb_vectordb_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pb_vectordb_proto_rawDesc), len(file_pb_vectordb_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

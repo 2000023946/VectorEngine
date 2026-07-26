@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0evectordb.proto\x12\x08vectordb\"\x1f\n\rInsertRequest\x12\x0e\n\x06vector\x18\x01 \x03(\x02\"!\n\x0eInsertResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"\x1e\n\rSearchRequest\x12\r\n\x05query\x18\x01 \x03(\x02\":\n\x0eSearchResponse\x12\x16\n\x0enearest_vector\x18\x01 \x03(\x02\x12\x10\n\x08\x64istance\x18\x02 \x01(\x02\x32\x89\x01\n\rVectorService\x12;\n\x06Insert\x12\x17.vectordb.InsertRequest\x1a\x18.vectordb.InsertResponse\x12;\n\x06Search\x12\x17.vectordb.SearchRequest\x1a\x18.vectordb.SearchResponseB\x06Z\x04./pbb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0evectordb.proto\x12\x08vectordb\"\x1f\n\rInsertRequest\x12\x0e\n\x06vector\x18\x01 \x03(\x02\"!\n\x0eInsertResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"\x1e\n\rSearchRequest\x12\r\n\x05query\x18\x01 \x03(\x02\":\n\x0eSearchResponse\x12\x16\n\x0enearest_vector\x18\x01 \x03(\x02\x12\x10\n\x08\x64istance\x18\x02 \x01(\x02\"\x0e\n\x0cStatsRequest\"\x1e\n\rStatsResponse\x12\r\n\x05\x63ount\x18\x01 \x01(\x03\x32\xc6\x01\n\rVectorService\x12;\n\x06Insert\x12\x17.vectordb.InsertRequest\x1a\x18.vectordb.InsertResponse\x12;\n\x06Search\x12\x17.vectordb.SearchRequest\x1a\x18.vectordb.SearchResponse\x12;\n\x08GetStats\x12\x16.vectordb.StatsRequest\x1a\x17.vectordb.StatsResponseB\x06Z\x04./pbb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -40,6 +40,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_SEARCHREQUEST']._serialized_end=126
   _globals['_SEARCHRESPONSE']._serialized_start=128
   _globals['_SEARCHRESPONSE']._serialized_end=186
-  _globals['_VECTORSERVICE']._serialized_start=189
-  _globals['_VECTORSERVICE']._serialized_end=326
+  _globals['_STATSREQUEST']._serialized_start=188
+  _globals['_STATSREQUEST']._serialized_end=202
+  _globals['_STATSRESPONSE']._serialized_start=204
+  _globals['_STATSRESPONSE']._serialized_end=234
+  _globals['_VECTORSERVICE']._serialized_start=237
+  _globals['_VECTORSERVICE']._serialized_end=435
 # @@protoc_insertion_point(module_scope)

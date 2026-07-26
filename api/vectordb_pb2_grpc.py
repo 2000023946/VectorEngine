@@ -45,6 +45,11 @@ class VectorServiceStub:
                 request_serializer=vectordb__pb2.SearchRequest.SerializeToString,
                 response_deserializer=vectordb__pb2.SearchResponse.FromString,
                 _registered_method=True)
+        self.GetStats = channel.unary_unary(
+                '/vectordb.VectorService/GetStats',
+                request_serializer=vectordb__pb2.StatsRequest.SerializeToString,
+                response_deserializer=vectordb__pb2.StatsResponse.FromString,
+                _registered_method=True)
 
 
 class VectorServiceServicer:
@@ -65,6 +70,13 @@ class VectorServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetStats(self, request, context):
+        """Fetches the current number of vectors stored on the node
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_VectorServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -77,6 +89,11 @@ def add_VectorServiceServicer_to_server(servicer, server):
                     servicer.Search,
                     request_deserializer=vectordb__pb2.SearchRequest.FromString,
                     response_serializer=vectordb__pb2.SearchResponse.SerializeToString,
+            ),
+            'GetStats': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetStats,
+                    request_deserializer=vectordb__pb2.StatsRequest.FromString,
+                    response_serializer=vectordb__pb2.StatsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -134,6 +151,33 @@ class VectorService:
             '/vectordb.VectorService/Search',
             vectordb__pb2.SearchRequest.SerializeToString,
             vectordb__pb2.SearchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetStats(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/vectordb.VectorService/GetStats',
+            vectordb__pb2.StatsRequest.SerializeToString,
+            vectordb__pb2.StatsResponse.FromString,
             options,
             channel_credentials,
             insecure,
