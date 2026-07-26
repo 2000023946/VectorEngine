@@ -33,11 +33,17 @@ spec:
     spec:
       containers:
         - name: vector-worker
-          # IMPORTANT: Change '2000023946' to 'momoabucar' if you logged into that account instead
           image: 2000023946/vectorengine-db:latest 
           imagePullPolicy: Always
           ports:
             - containerPort: 50051
+          resources:
+            requests:
+              cpu: "100m"      # 1/10th of a CPU core
+              memory: "128Mi"
+            limits:
+              cpu: "250m"      # Max 1/4th of a core
+              memory: "256Mi"
 
 ---
 # 3. LoadBalancer Service for Python API Gateway
@@ -74,8 +80,58 @@ spec:
     spec:
       containers:
         - name: vector-api
-          # IMPORTANT: Change '2000023946' to 'momoabucar' if you logged into that account instead
           image: 2000023946/vectorengine-api:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+
+---
+# 5. Autoscaler for Go Workers (Scales 3 to 10 pods)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vector-worker-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vector-worker-deployment
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+# 6. Autoscaler for API Gateway (Scales 2 to 5 pods)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vector-api-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vector-api-deployment
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
