@@ -13,9 +13,8 @@ import (
 // ==========================================
 
 func TestVectorEngine_InsertAndSearch(t *testing.T) {
-	// 1. Initialize our engine with a threshold of 3
-	// This ensures the index builds on the 3rd insert!
-	engine := NewVectorEngine(3)
+	// 1. Initialize our engine with a threshold of 3, and a queue size of 10
+	engine := NewVectorEngine(3, 10)
 
 	// 2. Insert test data
 	pointA := []float32{1.0, 1.0, 1.0}
@@ -26,9 +25,17 @@ func TestVectorEngine_InsertAndSearch(t *testing.T) {
 	engine.Insert(pointB)
 	engine.Insert(pointC)
 
+	// WAIT FOR GOROUTINE: Give the background worker time to pull
+	// from the queue and run buildIndex()
+	time.Sleep(100 * time.Millisecond)
+
 	// Verify the state machine actually transitioned
-	if engine.Phase != PhaseIndexed {
-		t.Fatalf("Engine failed to transition to PhaseIndexed. Current phase: %v", engine.Phase)
+	engine.mu.RLock()
+	phase := engine.Phase
+	engine.mu.RUnlock()
+
+	if phase != PhaseIndexed {
+		t.Fatalf("Engine failed to transition to PhaseIndexed. Current phase: %v", phase)
 	}
 
 	// 3. Perform a Search query
@@ -50,29 +57,31 @@ func TestVectorEngine_InsertAndSearch(t *testing.T) {
 
 // generateDummyEngine fills the DB with random vectors
 func generateDummyEngine(size int, dim int) *VectorEngine {
-	// By setting threshold exactly equal to size, the very last
-	// insert in this loop will trigger buildIndex() automatically!
-	engine := NewVectorEngine(size)
+	// Provide a queue large enough to hold the entire batch without blocking
+	engine := NewVectorEngine(size, size+100)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for i := 0; i < size; i++ {
 		data := make([]float32, dim)
 		for j := 0; j < dim; j++ {
-			// Random float between 0 and 100
 			data[j] = rng.Float32() * 100.0
 		}
 		engine.Insert(data)
 	}
+
+	// WAIT FOR GOROUTINE: Give the background worker a moment to execute
+	// Lloyd's algorithm on the full dataset before the benchmark starts
+	time.Sleep(500 * time.Millisecond)
 
 	return engine
 }
 
 // BenchmarkEngine_Search measures the latency of your cache-friendly bucket scan
 func BenchmarkEngine_Search(b *testing.B) {
-	// Setup: 30-dimensional vectors (e.g., 10 historical readings of X,Y,Z)
+	// Setup: 30-dimensional vectors
 	dim := 30
 
-	// Test against different dataset sizes to prove O(1) routing + bucket scanning
+	// Test against different dataset sizes
 	sizes := []int{1000, 10000, 50000}
 
 	for _, size := range sizes {
@@ -92,7 +101,6 @@ func BenchmarkEngine_Search(b *testing.B) {
 
 			// 4. The actual benchmark loop
 			for i := 0; i < b.N; i++ {
-				// We search for the closest match
 				engine.Search(query)
 			}
 		})
