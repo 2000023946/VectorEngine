@@ -26,20 +26,6 @@ services:
     networks:
       - vector-network
 
-  # The React + Tailwind Frontend
-  frontend:
-    build: 
-      context: ./frontend
-    ports:
-      # Assuming Vite's default port. Change to 3000 if using Create React App.
-      - "5173:5173"
-    environment:
-      # Pass the Gateway API URL to the React frontend
-      - VITE_API_URL=http://localhost:8000
-    depends_on:
-      - api
-    networks:
-      - vector-network
 
 networks:
   vector-network:

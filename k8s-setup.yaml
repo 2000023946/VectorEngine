@@ -1,0 +1,81 @@
+---
+# 1. Headless Service for Go Database Workers
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-worker-headless
+  namespace: default 
+spec:
+  clusterIP: None
+  selector:
+    app: vector-worker
+  ports:
+    - protocol: TCP
+      port: 50051
+      targetPort: 50051
+
+---
+# 2. Deployment for Go Database Workers
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vector-worker-deployment
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vector-worker
+  template:
+    metadata:
+      labels:
+        app: vector-worker
+    spec:
+      containers:
+        - name: vector-worker
+          # IMPORTANT: Change '2000023946' to 'momoabucar' if you logged into that account instead
+          image: 2000023946/vectorengine-db:latest 
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 50051
+
+---
+# 3. LoadBalancer Service for Python API Gateway
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-api-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: vector-api
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+
+---
+# 4. Deployment for Python API Gateway
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vector-api-deployment
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vector-api
+  template:
+    metadata:
+      labels:
+        app: vector-api
+    spec:
+      containers:
+        - name: vector-api
+          # IMPORTANT: Change '2000023946' to 'momoabucar' if you logged into that account instead
+          image: 2000023946/vectorengine-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
