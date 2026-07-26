@@ -33,7 +33,7 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 
 func main() {
 	// Call NewVectorEngine from your db package
-	engine := db.NewVectorEngine(10000)
+	engine := db.NewVectorEngine(10000, 1000)
 
 	grpcServer := grpc.NewServer()
 	pb.RegisterVectorServiceServer(grpcServer, &server{engine: engine})
