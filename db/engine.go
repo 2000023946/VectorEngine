@@ -4,237 +4,199 @@ import (
 	"math"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 )
-
-type Phase int
 
 const (
-	PhaseWarmup Phase = iota
-	PhaseIndexed
+	PhaseWarmup  = 0
+	PhaseIndexed = 1
 )
 
+// IndexState holds the active database snapshot.
+// Once created, it is IMMUTABLE. Never modify its slices directly.
+type IndexState struct {
+	Phase       int
+	Centroids   [][]float32
+	Buckets     [][][]float32
+	FlatList    [][]float32
+	SnapshotLen int // Tracks how many vectors are in this specific snapshot
+}
+
 type VectorEngine struct {
-	Phase      Phase
+	// Replaces RWMutex for all read operations
+	state atomic.Pointer[IndexState]
+
+	// writeMu only protects RawVectors during inserts
+	writeMu    sync.Mutex
+	RawVectors [][]float32
+
 	Threshold  int
-	RawVectors [][]float32   // Phase 1: Flat list for O(N) append
-	Centroids  [][]float32   // Phase 2: Frozen routing points
-	Buckets    [][][]float32 // Phase 2: Contiguous memory blocks
-
-	// Background Concurrency Fields
-	insertQueue chan []float32 // Hardware-like FIFO queue
-	mu          sync.RWMutex   // Protects reads/writes during phase transitions
+	K          int
+	isBuilding atomic.Bool // Prevents multiple background builds from stacking up
 }
 
-func NewVectorEngine(threshold int, queueSize int) *VectorEngine {
-	engine := &VectorEngine{
+// NewVectorEngine initializes the database in PhaseWarmup
+func NewVectorEngine(threshold, k int) *VectorEngine {
+	e := &VectorEngine{
+		Threshold: threshold,
+		K:         k,
+	}
+
+	initialState := &IndexState{
 		Phase:       PhaseWarmup,
-		Threshold:   threshold,
-		insertQueue: make(chan []float32, queueSize),
+		FlatList:    make([][]float32, 0),
+		SnapshotLen: 0,
 	}
+	e.state.Store(initialState)
 
-	// Spin up the background worker goroutine
-	go engine.backgroundWorker()
-
-	return engine
+	return e
 }
 
-// Insert drops the vector into the queue and returns immediately (Non-blocking)
+// Insert appends a new vector and determines if an index build is needed
 func (e *VectorEngine) Insert(vec []float32) {
-	e.insertQueue <- vec
-}
-
-// backgroundWorker continuously processes vectors from the queue
-func (e *VectorEngine) backgroundWorker() {
-	for vec := range e.insertQueue {
-		e.processInsert(vec)
-	}
-}
-
-// processInsert executes routing logic inside the background thread
-func (e *VectorEngine) processInsert(vec []float32) {
-	e.mu.Lock()
-	if e.Phase == PhaseIndexed {
-		// FAST PATH: Route to nearest centroid in O(K)
-		cIdx := e.findNearestCentroid(vec)
-		e.Buckets[cIdx] = append(e.Buckets[cIdx], vec)
-		e.mu.Unlock()
-		return
-	}
-
-	// WARMUP PATH: Flat append
+	e.writeMu.Lock()
 	e.RawVectors = append(e.RawVectors, vec)
-	shouldBuild := len(e.RawVectors) >= e.Threshold
-	e.mu.Unlock()
+	currentLen := len(e.RawVectors)
 
-	// Transition trigger
-	if shouldBuild {
-		e.buildIndex()
+	// If we are still in Warmup, we must update the state so Searches see the new vector
+	currentState := e.state.Load()
+	if currentState.Phase == PhaseWarmup {
+		// Copy-on-Write for the FlatList to ensure thread safety
+		newFlatList := make([][]float32, currentLen)
+		copy(newFlatList, e.RawVectors)
+
+		newState := &IndexState{
+			Phase:       PhaseWarmup,
+			FlatList:    newFlatList,
+			SnapshotLen: currentLen,
+		}
+		e.state.Store(newState)
+	}
+	e.writeMu.Unlock()
+
+	// If we crossed the threshold, trigger the background build.
+	// isBuilding ensures we don't spawn 500 routines if Locust hits us hard.
+	if currentLen >= e.Threshold && e.isBuilding.CompareAndSwap(false, true) {
+		go e.buildIndex()
 	}
 }
 
-// Search routes the query safely under a Read Lock
-func (e *VectorEngine) Search(query []float32) ([]float32, float32) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
+// Search executes completely lock-free using the atomic pointer
+func (e *VectorEngine) Search(query []float32) []float32 {
+	// Atomic load takes ~1ns. Zero queuing. Zero blocking.
+	currentState := e.state.Load()
 
-	if e.Phase == PhaseIndexed {
-		// 1. Find nearest frozen centroid
-		cIdx := e.findNearestCentroid(query)
-
-		// 2. Scan only that specific contiguous bucket
-		return findNearestInList(query, e.Buckets[cIdx])
+	// 1. Phase Warmup: Global Search
+	if currentState.Phase == PhaseWarmup {
+		return e.fallbackGlobalSearch(query, currentState.FlatList)
 	}
 
-	// Fallback: Brute force the raw list if still warming up
-	return findNearestInList(query, e.RawVectors)
+	// 2. Phase Indexed: K-Means Search
+	if len(currentState.Centroids) == 0 {
+		return nil // Safety check
+	}
+
+	// Find the closest centroid
+	bestCentroidIdx := 0
+	minDist := float32(math.MaxFloat32)
+
+	for i, centroid := range currentState.Centroids {
+		dist := l2Distance(query, centroid)
+		if dist < minDist {
+			minDist = dist
+			bestCentroidIdx = i
+		}
+	}
+
+	// Retrieve the bucket
+	targetBucket := currentState.Buckets[bestCentroidIdx]
+
+	// Poison Pill check: If bucket is empty, fallback to FlatList
+	if len(targetBucket) == 0 {
+		return e.fallbackGlobalSearch(query, currentState.FlatList)
+	}
+
+	// Search inside the targeted bucket
+	return e.fallbackGlobalSearch(query, targetBucket)
 }
 
-// buildIndex executes Lloyd's Algorithm without locking readers during computation
+// buildIndex runs in the background. It takes its time without blocking users.
 func (e *VectorEngine) buildIndex() {
-	// 1. Create a snapshot copy of RawVectors under Read Lock
-	e.mu.RLock()
-	N := len(e.RawVectors)
-	if N == 0 {
-		e.mu.RUnlock()
-		return
-	}
-	rawCopy := make([][]float32, N)
-	copy(rawCopy, e.RawVectors)
-	e.mu.RUnlock()
+	defer e.isBuilding.Store(false)
 
-	K := int(math.Sqrt(float64(N)))
-	dim := len(rawCopy[0])
+	// 1. Grab a quick snapshot of the data safely
+	e.writeMu.Lock()
+	snapshotLen := len(e.RawVectors)
+	snapshot := make([][]float32, snapshotLen)
+	copy(snapshot, e.RawVectors)
+	e.writeMu.Unlock()
 
-	// STEP 1: Random Initialization (Forgy Method)
-	centroids := make([][]float32, K)
-	perm := rand.Perm(N)
-	for i := 0; i < K; i++ {
-		centroids[i] = append([]float32(nil), rawCopy[perm[i]]...)
+	// 2. Background Math: Initialize Centroids randomly from snapshot
+	centroids := make([][]float32, e.K)
+	for i := 0; i < e.K; i++ {
+		centroids[i] = snapshot[rand.Intn(snapshotLen)]
 	}
 
-	// STEP 2: Lloyd's Algorithm (Runs completely unlocked)
-	maxIterations := 20
-	tolerance := float32(1e-5)
+	// 3. Lloyd's Algorithm (1 iteration for simplicity, increase for accuracy)
+	buckets := make([][][]float32, e.K)
+	for _, vec := range snapshot {
+		bestIdx := 0
+		minDist := float32(math.MaxFloat32)
 
-	for iter := 0; iter < maxIterations; iter++ {
-		tempBuckets := make([][][]float32, K)
-		for _, vec := range rawCopy {
-			cIdx := findNearestInCentroids(vec, centroids)
-			tempBuckets[cIdx] = append(tempBuckets[cIdx], vec)
-		}
-
-		maxShift := float32(0.0)
-		for i := 0; i < K; i++ {
-			if len(tempBuckets[i]) == 0 {
-				continue
+		for i, c := range centroids {
+			dist := l2Distance(vec, c)
+			if dist < minDist {
+				minDist = dist
+				bestIdx = i
 			}
-
-			newCentroid := make([]float32, dim)
-			for _, vec := range tempBuckets[i] {
-				for d := 0; d < dim; d++ {
-					newCentroid[d] += vec[d]
-				}
-			}
-
-			for d := 0; d < dim; d++ {
-				newCentroid[d] /= float32(len(tempBuckets[i]))
-			}
-
-			shift := euclideanSq(centroids[i], newCentroid)
-			if shift > maxShift {
-				maxShift = shift
-			}
-
-			centroids[i] = newCentroid
 		}
-
-		if maxShift < tolerance {
-			break
-		}
+		buckets[bestIdx] = append(buckets[bestIdx], vec)
 	}
 
-	// STEP 3: Create final buckets
-	buckets := make([][][]float32, K)
-	for _, vec := range rawCopy {
-		cIdx := findNearestInCentroids(vec, centroids)
-		buckets[cIdx] = append(buckets[cIdx], vec)
+	// 4. The Atomic Swap: Instantly upgrade the database state
+	newState := &IndexState{
+		Phase:       PhaseIndexed,
+		Centroids:   centroids,
+		Buckets:     buckets,
+		FlatList:    snapshot, // Keep snapshot as fallback for empty buckets
+		SnapshotLen: snapshotLen,
 	}
 
-	// STEP 4: Lock briefly to swap state, catching ghost inserts
-	e.mu.Lock()
-
-	// Rescue any vectors appended to RawVectors while the math was running
-	if len(e.RawVectors) > len(rawCopy) {
-		missedVectors := e.RawVectors[len(rawCopy):]
-		for _, vec := range missedVectors {
-			cIdx := findNearestInCentroids(vec, centroids)
-			buckets[cIdx] = append(buckets[cIdx], vec)
-		}
-	}
-
-	e.Centroids = centroids
-	e.Buckets = buckets
-	e.RawVectors = nil // Now it is safe to free memory
-	e.Phase = PhaseIndexed
-	e.mu.Unlock()
+	e.state.Store(newState)
 }
 
-// findNearestCentroid uses internal Centroids state
-func (e *VectorEngine) findNearestCentroid(vec []float32) int {
-	return findNearestInCentroids(vec, e.Centroids)
+// Size returns the true number of inserted vectors
+func (e *VectorEngine) Size() int {
+	e.writeMu.Lock()
+	defer e.writeMu.Unlock()
+	return len(e.RawVectors)
 }
 
-// Helper function to search arbitrary centroid slices
-func findNearestInCentroids(vec []float32, centroids [][]float32) int {
-	bestIdx := -1
+// fallbackGlobalSearch is a helper for exhaustive searching
+func (e *VectorEngine) fallbackGlobalSearch(query []float32, dataset [][]float32) []float32 {
+	if len(dataset) == 0 {
+		return nil
+	}
+
+	var bestMatch []float32
 	minDist := float32(math.MaxFloat32)
-	for i, centroid := range centroids {
-		dist := euclideanSq(vec, centroid)
+
+	for _, vec := range dataset {
+		dist := l2Distance(query, vec)
 		if dist < minDist {
 			minDist = dist
-			bestIdx = i
+			bestMatch = vec
 		}
 	}
-	return bestIdx
+	return bestMatch
 }
 
-// findNearestInList powers both the Phase 1 scan and Phase 2 bucket scan
-func findNearestInList(query []float32, list [][]float32) ([]float32, float32) {
-	if len(list) == 0 {
-		return nil, -1
-	}
-
-	var bestVec []float32
-	minDist := float32(math.MaxFloat32)
-	for _, v := range list {
-		dist := euclideanSq(query, v)
-		if dist < minDist {
-			minDist = dist
-			bestVec = v
-		}
-	}
-	return bestVec, minDist
-}
-
-// euclideanSq calculates squared Euclidean distance
-func euclideanSq(a, b []float32) float32 {
+// l2Distance calculates squared Euclidean distance
+func l2Distance(a, b []float32) float32 {
 	var sum float32
-	for i := range a {
+	for i := 0; i < len(a) && i < len(b); i++ {
 		diff := a[i] - b[i]
 		sum += diff * diff
 	}
 	return sum
-}
-func (e *VectorEngine) Size() int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	if e.Phase == PhaseIndexed {
-		total := 0
-		for _, bucket := range e.Buckets {
-			total += len(bucket)
-		}
-		return total
-	}
-	return len(e.RawVectors)
 }

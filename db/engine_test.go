@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -13,10 +14,8 @@ import (
 // ==========================================
 
 func TestVectorEngine_InsertAndSearch(t *testing.T) {
-	// 1. Initialize our engine with a threshold of 3, and a queue size of 10
-	engine := NewVectorEngine(3, 10)
+	engine := NewVectorEngine(3, 2)
 
-	// 2. Insert test data
 	pointA := []float32{1.0, 1.0, 1.0}
 	pointB := []float32{5.0, 5.0, 5.0}
 	pointC := []float32{10.0, 10.0, 10.0}
@@ -25,29 +24,18 @@ func TestVectorEngine_InsertAndSearch(t *testing.T) {
 	engine.Insert(pointB)
 	engine.Insert(pointC)
 
-	// WAIT FOR GOROUTINE: Poll the engine state until the background
-	// worker officially transitions it to PhaseIndexed.
 	for {
-		engine.mu.RLock()
-		phase := engine.Phase
-		engine.mu.RUnlock()
-
-		if phase == PhaseIndexed {
-			break // Math is done, exit the loop!
+		if engine.state.Load().Phase == PhaseIndexed {
+			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	// 3. Perform a Search query
-	// This point is closest to pointB (5,5,5)
 	query := []float32{4.5, 4.5, 4.5}
+	result := engine.Search(query)
 
-	// Ask for the closest match
-	result, dist := engine.Search(query)
-
-	// 4. Validate Accuracy
 	if !reflect.DeepEqual(result, pointB) {
-		t.Errorf("Expected closest match to be %v, got %v (Distance: %f)", pointB, result, dist)
+		t.Errorf("Expected closest match to be %v, got %v", pointB, result)
 	}
 }
 
@@ -57,8 +45,13 @@ func TestVectorEngine_InsertAndSearch(t *testing.T) {
 
 // generateDummyEngine fills the DB with random vectors
 func generateDummyEngine(size int, dim int) *VectorEngine {
-	// Provide a queue large enough to hold the entire batch without blocking
-	engine := NewVectorEngine(size, size+100)
+	// Optimal K is the square root of N
+	k := int(math.Sqrt(float64(size)))
+	if k < 2 {
+		k = 2
+	}
+
+	engine := NewVectorEngine(size, k)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for i := 0; i < size; i++ {
@@ -69,51 +62,69 @@ func generateDummyEngine(size int, dim int) *VectorEngine {
 		engine.Insert(data)
 	}
 
-	// WAIT FOR GOROUTINE: Poll the engine state until the background
-	// worker officially transitions it to PhaseIndexed.
 	for {
-		engine.mu.RLock()
-		phase := engine.Phase
-		engine.mu.RUnlock()
-
-		if phase == PhaseIndexed {
-			break // The math is done! Exit the wait loop.
+		if engine.state.Load().Phase == PhaseIndexed {
+			break
 		}
-
-		// Sleep for just 10ms before checking again so we don't fry the CPU
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	return engine
 }
 
-// BenchmarkEngine_Search measures the latency of your cache-friendly bucket scan
 func BenchmarkEngine_Search(b *testing.B) {
-	// Setup: 30-dimensional vectors
 	dim := 30
-
-	// Test against different dataset sizes
 	sizes := []int{1000, 10000, 50000}
 
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("Dataset_%d", size), func(b *testing.B) {
-
-			// 1. Pre-load the database before starting the timer
 			engine := generateDummyEngine(size, dim)
-
-			// 2. Create a stable query vector
 			query := make([]float32, dim)
 			for j := 0; j < dim; j++ {
 				query[j] = 50.0
 			}
 
-			// 3. Reset the timer so ingestion/indexing time isn't counted
 			b.ResetTimer()
 
-			// 4. The actual benchmark loop
 			for i := 0; i < b.N; i++ {
 				engine.Search(query)
 			}
 		})
 	}
+}
+
+func BenchmarkSearchParallel(b *testing.B) {
+	// N = 50,000, K = sqrt(50,000) = 223
+	numVectors := 50000
+	k := 223
+	vectorsPerBucket := numVectors / k
+	dim := 30 // Aligned with the sequential test
+
+	engine := NewVectorEngine(numVectors, k)
+
+	centroids := make([][]float32, k)
+	buckets := make([][][]float32, k)
+
+	for i := 0; i < k; i++ {
+		centroids[i] = make([]float32, dim)
+		for j := 0; j < vectorsPerBucket; j++ {
+			buckets[i] = append(buckets[i], make([]float32, dim))
+		}
+	}
+
+	newState := &IndexState{
+		Phase:     PhaseIndexed,
+		Centroids: centroids,
+		Buckets:   buckets,
+	}
+	engine.state.Store(newState)
+
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		query := make([]float32, dim)
+		for pb.Next() {
+			engine.Search(query)
+		}
+	})
 }
