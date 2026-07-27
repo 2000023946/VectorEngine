@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Locust Test Report</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f6f8;
+            color: #333;
+            margin: 0;
+            padding: 20px 40px;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        .header-info {
+            background: #fff;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .header-info div {
+            margin-bottom: 5px;
+        }
+        .header-info strong {
+            color: #555;
+        }
+        .report-section {
+            background: #fff;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            white-space: nowrap;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: right;
+            border-bottom: 1px solid #e9ecef;
+        }
+        th:first-child, td:first-child {
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            color: #495057;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+        }
+        tr:hover {
+            background-color: #f1f3f5;
+        }
+        .text-error {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .badge {
+            background: #e2e8f0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #4a5568;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Locust Test Report</h1>
+    
+    <div class="header-info">
+        <div>
+            <div><strong>During:</strong> 7/26/2026, 7:58:30 PM - 7/26/2026, 8:01:31 PM (3 minutes and 1 second)</div>
+            <div><strong>Target Host:</strong> <a href="http://localhost:8000" target="_blank">http://localhost:8000</a></div>
+            <div><strong>Script:</strong> <span class="badge">locust.py</span></div>
+        </div>
+    </div>
+
+    <div class="report-section">
+        <h2>Request Statistics</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Name</th>
+                    <th># Requests</th>
+                    <th># Fails</th>
+                    <th>Average (ms)</th>
+                    <th>Min (ms)</th>
+                    <th>Max (ms)</th>
+                    <th>Average size (bytes)</th>
+                    <th>RPS</th>
+                    <th>Failures/s</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>POST</td>
+                    <td>/insert</td>
+                    <td>63,840</td>
+                    <td>0</td>
+                    <td>3173.19</td>
+                    <td>92</td>
+                    <td>10624</td>
+                    <td>47</td>
+                    <td>35.33</td>
+                    <td>0.00</td>
+                </tr>
+                <tr>
+                    <td>POST</td>
+                    <td>/search</td>
+                    <td>191,924</td>
+                    <td class="text-error">467</td>
+                    <td>3426.47</td>
+                    <td>71</td>
+                    <td>21066</td>
+                    <td>81</td>
+                    <td>106.20</td>
+                    <td>2.58</td>
+                </tr>
+                <tr style="font-weight: bold; background-color: #f8f9fa;">
+                    <td></td>
+                    <td>Aggregated</td>
+                    <td>255,764</td>
+                    <td class="text-error">467</td>
+                    <td>3363.25</td>
+                    <td>71</td>
+                    <td>21066</td>
+                    <td>81</td>
+                    <td>141.53</td>
+                    <td>2.58</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="report-section">
+        <h2>Response Time Statistics</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Name</th>
+                    <th>50%ile (ms)</th>
+                    <th>60%ile (ms)</th>
+                    <th>70%ile (ms)</th>
+                    <th>80%ile (ms)</th>
+                    <th>90%ile (ms)</th>
+                    <th>95%ile (ms)</th>
+                    <th>99%ile (ms)</th>
+                    <th>100%ile (ms)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>POST</td>
+                    <td>/insert</td>
+                    <td>2600</td>
+                    <td>2800</td>
+                    <td>3300</td>
+                    <td>4000</td>
+                    <td>5600</td>
+                    <td>7000</td>
+                    <td>9300</td>
+                    <td>11000</td>
+                </tr>
+                <tr>
+                    <td>POST</td>
+                    <td>/search</td>
+                    <td>2800</td>
+                    <td>3100</td>
+                    <td>3500</td>
+                    <td>4400</td>
+                    <td>6000</td>
+                    <td>7400</td>
+                    <td>9700</td>
+                    <td>11000</td>
+                </tr>
+                <tr style="font-weight: bold; background-color: #f8f9fa;">
+                    <td></td>
+                    <td>Aggregated</td>
+                    <td>2700</td>
+                    <td>3000</td>
+                    <td>3500</td>
+                    <td>4300</td>
+                    <td>5900</td>
+                    <td>7300</td>
+                    <td>9700</td>
+                    <td>11000</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="report-section">
+        <h2>Failures Statistics</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th># Failures</th>
+                    <th>Method</th>
+                    <th>Name</th>
+                    <th>Message</th>
+                    <th>First Seen</th>
+                    <th>Last Seen</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="text-error">467</td>
+                    <td>POST</td>
+                    <td>/search</td>
+                    <td style="text-align: left;"><code>HTTPError('500 Server Error: Internal Server Error for url: /search')</code></td>
+                    <td>7/26/2026, 7:58:46 PM</td>
+                    <td>7/26/2026, 8:01:26 PM</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="report-section">
+        <h2>Charts: Ratio Per Class</h2>
+        <ul>
+            <li><strong>Total Ratio: 100.0%</strong> VectorEngineUser</li>
+            <li><strong>25.0%</strong> insertVector</li>
+            <li><strong>75.0%</strong> searchVector</li>
+        </ul>
+    </div>
+
+</body>
+</html>

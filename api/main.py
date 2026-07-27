@@ -1,6 +1,7 @@
 import asyncio
 import socket
 import random
+import itertools
 from contextlib import asynccontextmanager
 from typing import List, Dict
 from fastapi import FastAPI, HTTPException
@@ -15,10 +16,24 @@ import vectordb_pb2_grpc
 HEADLESS_DNS = "vector-worker-headless.default.svc.cluster.local"
 GRPC_PORT = 50051
 
-CHANNEL_POOL: Dict[str, aio.Channel] = {}
-WORKER_STATS: Dict[str, int] = {} 
-ACTIVE_IPS: List[str] = []  # NEW: Global cache for worker IPs
+# --- MULTIPLEXING CONFIGURATION ---
+# 5 channels per node ensures we don't hit the HTTP/2 max_concurrent_streams ceiling
+POOL_SIZE_PER_NODE = 5  
 
+# Global State
+CHANNEL_POOL: Dict[str, List[aio.Channel]] = {}
+POOL_ITERATORS: Dict[str, itertools.cycle] = {}
+WORKER_STATS: Dict[str, int] = {} 
+ACTIVE_IPS: List[str] = []
+
+# gRPC C-Core tuning for high-throughput and keep-alive stability
+GRPC_OPTIONS = [
+    ('grpc.max_concurrent_streams', 1000),
+    ('grpc.keepalive_time_ms', 10000),
+    ('grpc.keepalive_timeout_ms', 5000),
+    ('grpc.keepalive_permit_without_calls', True),
+    ('grpc.http2.max_pings_without_data', 0),
+]
 
 async def sync_worker_stats():
     """Background task to resolve DNS and fetch sizes every 5 seconds."""
@@ -26,14 +41,12 @@ async def sync_worker_stats():
     loop = asyncio.get_running_loop()
     
     while True:
-        # 1. Resolve DNS asynchronously so we don't block the main thread
         try:
             _, _, ips = await loop.run_in_executor(None, socket.gethostbyname_ex, HEADLESS_DNS)
             ACTIVE_IPS = ips
         except socket.gaierror:
             ACTIVE_IPS = ["localhost"]
 
-        # 2. Fetch stats from the discovered IPs
         new_stats = {}
         for ip in ACTIVE_IPS:
             try:
@@ -51,11 +64,23 @@ async def sync_worker_stats():
 
 
 def get_grpc_stub(ip: str) -> vectordb_pb2_grpc.VectorServiceStub:
+    """Fetches a stub using a Round-Robin channel pool to prevent stream starvation."""
     target = f"{ip}:{GRPC_PORT}"
+    
     if target not in CHANNEL_POOL:
-        channel = aio.insecure_channel(target)
-        CHANNEL_POOL[target] = channel
-    return vectordb_pb2_grpc.VectorServiceStub(CHANNEL_POOL[target])
+        # Initialize a pool of channels for this newly discovered node
+        CHANNEL_POOL[target] = [
+            aio.insecure_channel(target, options=GRPC_OPTIONS) 
+            for _ in range(POOL_SIZE_PER_NODE)
+        ]
+        # Create an infinite iterator that cycles through indices 0 to POOL_SIZE-1
+        POOL_ITERATORS[target] = itertools.cycle(range(POOL_SIZE_PER_NODE))
+        
+    # Pick the next channel in the rotation
+    idx = next(POOL_ITERATORS[target])
+    channel = CHANNEL_POOL[target][idx]
+    
+    return vectordb_pb2_grpc.VectorServiceStub(channel)
 
 
 @asynccontextmanager
@@ -63,8 +88,10 @@ async def lifespan(app: FastAPI):
     stats_task = asyncio.create_task(sync_worker_stats())
     yield
     stats_task.cancel()
-    for ip, channel in CHANNEL_POOL.items():
-        await channel.close()
+    # Clean up all channels across all pools
+    for pool in CHANNEL_POOL.values():
+        for channel in pool:
+            await channel.close()
 
 app = FastAPI(title="Distributed Vector DB Gateway", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -105,8 +132,9 @@ async def search_single_node(ip: str, vector: List[float]):
     stub = get_grpc_stub(ip)
     req = vectordb_pb2.SearchRequest(query=vector)
     try:
-        # Fail fast under load so we don't back up the gateway queue
-        resp = await stub.Search(req, timeout=1.0)
+        # Bumped timeout to 2.0s. Under extreme Locust load, Python's 
+        # event loop queues tasks for ~500ms before they even hit the network.
+        resp = await stub.Search(req, timeout=2.0)
         return resp
     except grpc.RpcError:
         return None
@@ -117,9 +145,7 @@ async def search_vector(data: VectorInput):
     if not ACTIVE_IPS:
         raise HTTPException(status_code=503, detail="No active database nodes found.")
 
-    # Optional: If you have many worker pods, pick a subset (e.g., up to 2) 
-    # instead of broadcasting to every single node simultaneously.
-    # targets = random.sample(ACTIVE_IPS, min(len(ACTIVE_IPS), 2))
+    # Target all active pods to find the global nearest neighbor
     targets = ACTIVE_IPS
 
     async with asyncio.TaskGroup() as tg:
@@ -128,7 +154,7 @@ async def search_vector(data: VectorInput):
     valid_responses = [task.result() for task in tasks if task.result() is not None]
 
     if not valid_responses:
-        raise HTTPException(status_code=500, detail="All nodes failed to process the search.")
+        raise HTTPException(status_code=500, detail="All nodes failed to process the search or timed out.")
 
     best_match = min(valid_responses, key=lambda resp: resp.distance)
 
