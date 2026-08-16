@@ -37,6 +37,18 @@ func createEngine(numVectors int) *src.VectorEngine {
 }
 
 // --------------------------------------------------
+// INITIALIZATION BENCHMARK
+// --------------------------------------------------
+
+func BenchmarkInitialization(b *testing.B) {
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		src.NewVectorEngine()
+	}
+}
+
+// --------------------------------------------------
 // INSERT BENCHMARKS
 // --------------------------------------------------
 

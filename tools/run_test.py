@@ -18,17 +18,28 @@ REPORT_DIR = ROOT / "benchmarks"
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 REPORT = REPORT_DIR / "results.html"
 
-
 def run(command):
-    # Running commands with cwd=ROOT ensures "./tests/unit" works perfectly
-    result = subprocess.run(
+    print(f"\n>>> Executing: {' '.join(command)}")
+    
+    process = subprocess.Popen(
         command,
         cwd=ROOT,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
+        bufsize=1,
     )
-    return result.returncode, result.stdout + result.stderr
-
+    
+    output = []
+    
+    # Check if stdout exists to satisfy Pylance
+    if process.stdout is not None:
+        for line in process.stdout:
+            print(line, end="")
+            output.append(line)
+            
+    process.wait()
+    return process.returncode, "".join(output)
 
 def get_accuracy(output):
     match = re.search(r"Accuracy:\s*([0-9.]+)%", output)
@@ -142,12 +153,29 @@ def main():
     # --------------------------------------------------
     # RUN TESTS
     # --------------------------------------------------
-    unit_code, unit_output = run(["go", "test", "./tests/unit"])
-    accuracy_code, accuracy_output = run(["go", "test", "-v", "./tests/accuracy"])
-    accuracy = get_accuracy(accuracy_output)
-    accuracy_passed = (accuracy_code == 0 and accuracy is not None and accuracy >= 90.0)
+    unit_code, unit_output = run([
+        "go", "test", "-count=1", "./tests/unit"
+    ])
 
-    benchmark_code, benchmark_output = run(["go", "test", "-bench=.", "-benchmem", "./tests/performance"])
+    accuracy_code, accuracy_output = run([
+        "go", "test", "-count=1", "-v", "./tests/accuracy"
+    ])
+
+    accuracy = get_accuracy(accuracy_output)
+    accuracy_passed = (
+        accuracy_code == 0
+        and accuracy is not None
+        and accuracy >= 90.0
+    )
+
+    benchmark_code, benchmark_output = run([
+        "go", "test",
+        "-count=1",
+        "-bench=.",
+        "-benchmem",
+        "./tests/performance"
+    ])
+
     benchmarks = get_benchmarks(benchmark_output)
     
     overall_passed = (unit_code == 0 and accuracy_passed and benchmark_code == 0)

@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	numVectors = 10_000
 	numQueries = 1_000
 	dimension  = 128
 	k          = 10
@@ -25,26 +24,89 @@ func generateVector() []float64 {
 	return vector
 }
 
-func TestSearchAccuracy(t *testing.T) {
+func distance(a []float64, b []float64) float64 {
+	var sum float64
+
+	for i := range a {
+		diff := a[i] - b[i]
+		sum += diff * diff
+	}
+
+	return sum
+}
+
+func bruteForce(
+	vectors [][]float64,
+	ids []int,
+	query []float64,
+	k int,
+) map[int]bool {
+
+	type candidate struct {
+		id       int
+		distance float64
+	}
+
+	results := make([]candidate, 0, len(vectors))
+
+	for i, vector := range vectors {
+		results = append(results, candidate{
+			id:       ids[i],
+			distance: distance(query, vector),
+		})
+	}
+
+	// Simple exact sort.
+	for i := 0; i < len(results); i++ {
+		for j := i + 1; j < len(results); j++ {
+			if results[j].distance < results[i].distance {
+				results[i], results[j] = results[j], results[i]
+			}
+		}
+	}
+
+	groundTruth := make(map[int]bool, k)
+
+	for i := 0; i < k && i < len(results); i++ {
+		groundTruth[results[i].id] = true
+	}
+
+	return groundTruth
+}
+
+func runAccuracyTest(
+	t *testing.T,
+	numVectors int,
+) {
+	t.Helper()
+
 	rand.Seed(42)
 
 	engine := src.NewVectorEngine()
 
-	// --------------------------------------------------
+	vectors := make([][]float64, numVectors)
+	ids := make([]int, numVectors)
+
+	// ----------------------------------------------
 	// Build dataset
-	// --------------------------------------------------
+	// ----------------------------------------------
 
 	for i := 0; i < numVectors; i++ {
-		err := engine.Insert(i, generateVector())
+		vector := generateVector()
+
+		vectors[i] = vector
+		ids[i] = i
+
+		err := engine.Insert(i, vector)
 
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// --------------------------------------------------
+	// ----------------------------------------------
 	// Generate queries
-	// --------------------------------------------------
+	// ----------------------------------------------
 
 	queries := make([][]float64, numQueries)
 
@@ -52,20 +114,23 @@ func TestSearchAccuracy(t *testing.T) {
 		queries[i] = generateVector()
 	}
 
-	// --------------------------------------------------
-	// Test search
-	// --------------------------------------------------
+	// ----------------------------------------------
+	// Compare IVF against exact brute force
+	// ----------------------------------------------
 
 	correct := 0
 	total := numQueries * k
 
 	for _, query := range queries {
 
-		results := engine.Search(query, k)
+		groundTruth := bruteForce(
+			vectors,
+			ids,
+			query,
+			k,
+		)
 
-		// Brute force is the exact search algorithm,
-		// so we only need to verify that the results
-		// are correctly ordered and contain k results.
+		results := engine.Search(query, k)
 
 		if len(results) != k {
 			t.Fatalf(
@@ -75,19 +140,11 @@ func TestSearchAccuracy(t *testing.T) {
 			)
 		}
 
-		// Verify distances are ordered from smallest
-		// to largest.
-		for i := 1; i < len(results); i++ {
-			if results[i].Distance < results[i-1].Distance {
-				t.Fatalf(
-					"results are not ordered by distance",
-				)
+		for _, result := range results {
+			if groundTruth[result.ID] {
+				correct++
 			}
 		}
-
-		// Because brute force examines every vector,
-		// every returned neighbor is exact.
-		correct += k
 	}
 
 	accuracy := float64(correct) / float64(total) * 100
@@ -104,11 +161,22 @@ func TestSearchAccuracy(t *testing.T) {
 	fmt.Printf("Accuracy:  %.2f%%\n", accuracy)
 	fmt.Printf("=====================================\n")
 
-	// Require at least 90% accuracy.
 	if accuracy < 90.0 {
 		t.Fatalf(
 			"accuracy %.2f%% is below required 90%%",
 			accuracy,
 		)
 	}
+}
+
+func TestSearchAccuracy10K(t *testing.T) {
+	runAccuracyTest(t, 10_000)
+}
+
+func TestSearchAccuracy100K(t *testing.T) {
+	runAccuracyTest(t, 100_000)
+}
+
+func TestSearchAccuracy1M(t *testing.T) {
+	runAccuracyTest(t, 1_000_000)
 }

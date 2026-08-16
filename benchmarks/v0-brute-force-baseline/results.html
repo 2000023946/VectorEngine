@@ -170,7 +170,7 @@
             <div style="color: var(--text-muted); margin-top: 5px;">Automated Test Report</div>
         </div>
         <div class="date-badge">
-            Generated: 2026-08-16 13:29:11
+            Generated: 2026-08-16 14:15:28
         </div>
     </header>
 
@@ -192,7 +192,7 @@
             <span class="summary-title">Engine Accuracy</span>
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <span class="summary-value" style="color: #166534;">100.00%</span>
-                <span class="badge pass">PASS</span>
+                <span class="badge fail">FAIL</span>
             </div>
         </div>
 
@@ -210,16 +210,16 @@
             <h2>1. Unit Tests</h2>
             <span class="badge pass">PASS</span>
         </div>
-        <pre style="margin:0;">ok  	vectorengine/tests/unit	(cached)
+        <pre style="margin:0;">ok  	vectorengine/tests/unit	0.374s
 </pre>
     </div>
 
     <div class="section-card">
         <div class="section-header">
             <h2>2. Engine Accuracy</h2>
-            <span class="badge pass">PASS</span>
+            <span class="badge fail">FAIL</span>
         </div>
-        <pre style="margin:0;">=== RUN   TestSearchAccuracy
+        <pre style="margin:0;">=== RUN   TestSearchAccuracy10K
 
 =====================================
 VectorEngine Accuracy Test
@@ -231,9 +231,45 @@ K:         10
 Correct:   10000 / 10000
 Accuracy:  100.00%
 =====================================
---- PASS: TestSearchAccuracy (3.69s)
-PASS
-ok  	vectorengine/tests/accuracy	(cached)
+--- PASS: TestSearchAccuracy10K (80.83s)
+=== RUN   TestSearchAccuracy100K
+panic: test timed out after 10m0s
+	running tests:
+		TestSearchAccuracy100K (8m39s)
+
+goroutine 3 [running]:
+testing.(*M).startAlarm.func1()
+	/usr/local/go/src/testing/testing.go:2802 +0x2cc
+created by time.goFunc
+	/usr/local/go/src/time/sleep.go:215 +0x38
+
+goroutine 1 [chan receive, 8 minutes]:
+testing.(*T).Run(0x51f7052e6008, {0x104c42675?, 0x1eafdd9004bf83c0?}, 0x104d99238)
+	/usr/local/go/src/testing/testing.go:2109 +0x3bc
+testing.runTests.func1(0x51f7052e6008)
+	/usr/local/go/src/testing/testing.go:2585 +0x40
+testing.tRunner(0x51f7052e6008, 0x51f70529ec48)
+	/usr/local/go/src/testing/testing.go:2036 +0xc4
+testing.runTests({0x104c3f774, 0xc}, {0x104c43b3d, 0x1b}, 0x51f7052b2018, {0x104dbdd80, 0x3, 0x3}, {0x80808080790a1030?, 0x104c404e0?, ...})
+	/usr/local/go/src/testing/testing.go:2583 +0x3f0
+testing.(*M).Run(0x51f7052a2140)
+	/usr/local/go/src/testing/testing.go:2443 +0x578
+main.main()
+	_testmain.go:50 +0x80
+
+goroutine 2 [runnable]:
+vectorengine/tests/accuracy.bruteForce({0x51f706438000?, 0x186a0, 0xc6c4?}, {0x51f706682000, 0x186a0, 0x0?}, {0x51f70c054400, 0x80, 0x0?}, 0xa)
+	/Users/momoabucar/Desktop/VectorEngine/tests/accuracy/accuracy_test.go:61 +0x1c8
+vectorengine/tests/accuracy.runAccuracyTest(0x51f7052e6488, 0x186a0)
+	/Users/momoabucar/Desktop/VectorEngine/tests/accuracy/accuracy_test.go:126 +0x30c
+vectorengine/tests/accuracy.TestSearchAccuracy100K(0x51f7052e6488?)
+	/Users/momoabucar/Desktop/VectorEngine/tests/accuracy/accuracy_test.go:177 +0x24
+testing.tRunner(0x51f7052e6488, 0x104d99238)
+	/usr/local/go/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/usr/local/go/src/testing/testing.go:2101 +0x3a8
+FAIL	vectorengine/tests/accuracy	600.325s
+FAIL
 </pre>
     </div>
 
@@ -275,9 +311,9 @@ ok  	vectorengine/tests/accuracy	(cached)
                 
         <tr>
             <td class="font-mono">BenchmarkInsert10K-8</td>
-            <td class="text-right font-mono">14275343 ns</td>
+            <td class="text-right font-mono">14594759 ns</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
-            <td class="text-right font-mono">11711227 B</td>
+            <td class="text-right font-mono">11711085 B</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
             <td class="text-right font-mono">10019</td>
             <td class="text-center"><span class="grade grade-D">D</span></td>
@@ -285,9 +321,9 @@ ok  	vectorengine/tests/accuracy	(cached)
         
         <tr>
             <td class="font-mono">BenchmarkInsert100K-8</td>
-            <td class="text-right font-mono">147109099 ns</td>
+            <td class="text-right font-mono">145399220 ns</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
-            <td class="text-right font-mono">120165002 B</td>
+            <td class="text-right font-mono">120164992 B</td>
             <td class="text-center"><span class="grade grade-C">C</span></td>
             <td class="text-right font-mono">100029</td>
             <td class="text-center"><span class="grade grade-F">F</span></td>
@@ -295,17 +331,17 @@ ok  	vectorengine/tests/accuracy	(cached)
         
         <tr>
             <td class="font-mono">BenchmarkInsert1M-8</td>
-            <td class="text-right font-mono">1586999291 ns</td>
+            <td class="text-right font-mono">1565544875 ns</td>
             <td class="text-center"><span class="grade grade-B">B</span></td>
-            <td class="text-right font-mono">1196413536 B</td>
+            <td class="text-right font-mono">1196413648 B</td>
             <td class="text-center"><span class="grade grade-F">F</span></td>
-            <td class="text-right font-mono">1000039</td>
+            <td class="text-right font-mono">1000040</td>
             <td class="text-center"><span class="grade grade-F">F</span></td>
         </tr>
         
         <tr>
             <td class="font-mono">BenchmarkSearch10K-8</td>
-            <td class="text-right font-mono">3612629 ns</td>
+            <td class="text-right font-mono">3719033 ns</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
             <td class="text-right font-mono">163928 B</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
@@ -315,7 +351,7 @@ ok  	vectorengine/tests/accuracy	(cached)
         
         <tr>
             <td class="font-mono">BenchmarkSearch100K-8</td>
-            <td class="text-right font-mono">40791183 ns</td>
+            <td class="text-right font-mono">41525289 ns</td>
             <td class="text-center"><span class="grade grade-B">B</span></td>
             <td class="text-right font-mono">1605720 B</td>
             <td class="text-center"><span class="grade grade-B">B</span></td>
@@ -325,7 +361,7 @@ ok  	vectorengine/tests/accuracy	(cached)
         
         <tr>
             <td class="font-mono">BenchmarkSearch1M-8</td>
-            <td class="text-right font-mono">453761444 ns</td>
+            <td class="text-right font-mono">483733167 ns</td>
             <td class="text-center"><span class="grade grade-C">C</span></td>
             <td class="text-right font-mono">16007256 B</td>
             <td class="text-center"><span class="grade grade-C">C</span></td>
@@ -339,7 +375,7 @@ ok  	vectorengine/tests/accuracy	(cached)
 
     <!-- Chart.js Injection Script -->
     <script>
-        const chartData = {"labels": ["10K", "100K", "1M"], "insert": {"time": [14.275343, 147.109099, 1586.999291], "mem": [11.168696403503418, 114.59827613830566, 1140.9888610839844], "allocs": [10019, 100029, 1000039]}, "search": {"time": [3.612629, 40.791183, 453.761444], "mem": [0.15633392333984375, 1.5313339233398438, 15.265708923339844], "allocs": [4, 4, 4]}};
+        const chartData = {"labels": ["10K", "100K", "1M"], "insert": {"time": [14.594759, 145.39922, 1565.544875], "mem": [11.168560981750488, 114.5982666015625, 1140.9889678955078], "allocs": [10019, 100029, 1000040]}, "search": {"time": [3.719033, 41.525289, 483.733167], "mem": [0.15633392333984375, 1.5313339233398438, 15.265708923339844], "allocs": [4, 4, 4]}};
 
         const chartConfig = (type, label, data, color, yAxisLabel) => ({
             type: type,
