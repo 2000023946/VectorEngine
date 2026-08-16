@@ -14,7 +14,7 @@ const (
 	NumCentroids = 100
 
 	// Number of centroids searched for each query.
-	NumProbes = 5
+	NumProbes = 60
 
 	// Number of Lloyd's iterations used to train the centroids.
 	LloydIterations = 5

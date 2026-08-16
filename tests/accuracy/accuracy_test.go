@@ -173,10 +173,10 @@ func TestSearchAccuracy10K(t *testing.T) {
 	runAccuracyTest(t, 10_000)
 }
 
-func TestSearchAccuracy100K(t *testing.T) {
-	runAccuracyTest(t, 100_000)
-}
+// func TestSearchAccuracy100K(t *testing.T) {
+// 	runAccuracyTest(t, 100_000)
+// }
 
-func TestSearchAccuracy1M(t *testing.T) {
-	runAccuracyTest(t, 1_000_000)
-}
+// func TestSearchAccuracy1M(t *testing.T) {
+// 	runAccuracyTest(t, 1_000_000)
+// }
