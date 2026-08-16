@@ -151,23 +151,36 @@ def main():
     print()
 
     # --------------------------------------------------
-    # RUN TESTS
+    # UNIT TESTS
     # --------------------------------------------------
+    # Always run unit tests from scratch.
     unit_code, unit_output = run([
-        "go", "test", "-count=1", "./tests/unit"
+        "go", "test",
+        "-count=1",
+        "./tests/unit"
     ])
 
+    # --------------------------------------------------
+    # ACCURACY TESTS
+    # --------------------------------------------------
+    # Allow Go to use the test cache.
     accuracy_code, accuracy_output = run([
-        "go", "test", "-count=1", "-v", "./tests/accuracy"
+        "go", "test",
+        "./tests/accuracy"
     ])
 
     accuracy = get_accuracy(accuracy_output)
+
     accuracy_passed = (
         accuracy_code == 0
         and accuracy is not None
         and accuracy >= 90.0
     )
 
+    # --------------------------------------------------
+    # PERFORMANCE BENCHMARKS
+    # --------------------------------------------------
+    # Never rely on cached benchmark results.
     benchmark_code, benchmark_output = run([
         "go", "test",
         "-count=1",

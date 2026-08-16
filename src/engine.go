@@ -175,3 +175,12 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 
 	return results
 }
+
+// Reset clears the logical contents of the engine without
+// reallocating its backing memory.
+//
+// The vectorData and ids buffers are intentionally reused.
+// Insert will overwrite the old values.
+func (ve *VectorEngine) Reset() {
+	ve.count = 0
+}
