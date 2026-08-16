@@ -6,9 +6,14 @@ import (
 	"sort"
 )
 
+const (
+	maxVectors = 2_000_000
+	dimension  = 128
+)
+
 type Vector struct {
 	ID     int
-	Values []float64
+	Offset int
 }
 
 type Result struct {
@@ -22,23 +27,42 @@ type VectorNode struct {
 }
 
 type VectorEngine struct {
-	vectors   []Vector
-	nodes     map[int]*VectorNode
+	// One large contiguous allocation:
+	//
+	// 2,000,000 vectors * 128 dimensions * 8 bytes
+	// = 2.048 GB
+	vectorData []float64
+
+	// Vector metadata only.
+	vectors []Vector
+
+	// Graph nodes.
+	nodes map[int]*VectorNode
+
 	dimension int
+	count     int
 	entryID   int
 }
 
 func NewVectorEngine() *VectorEngine {
 	return &VectorEngine{
-		vectors: make([]Vector, 0),
-		nodes:   make(map[int]*VectorNode),
+		// Preallocate ~2 GB of contiguous vector memory.
+		vectorData: make([]float64, maxVectors*dimension),
+
+		// Preallocate metadata for all vectors.
+		vectors: make([]Vector, 0, maxVectors),
+
+		// Preallocate the hash map for the expected number of vectors.
+		nodes: make(map[int]*VectorNode, maxVectors),
+
+		dimension: dimension,
 	}
 }
 
 func (ve *VectorEngine) Insert(id int, values []float64) error {
 	// The first vector establishes the dimension
 	// of the vector space.
-	if ve.dimension == 0 {
+	if ve.count == 0 {
 		ve.dimension = len(values)
 	} else if len(values) != ve.dimension {
 		return fmt.Errorf(
@@ -48,9 +72,35 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 		)
 	}
 
+	// Make sure we don't exceed our preallocated buffer.
+	if ve.count >= maxVectors {
+		return fmt.Errorf(
+			"vector capacity exceeded: maximum %d vectors",
+			maxVectors,
+		)
+	}
+
+	// --------------------------------------------------
+	// Store vector in the flat contiguous buffer.
+	// --------------------------------------------------
+	//
+	// Vector i occupies:
+	//
+	// [i*dimension : (i+1)*dimension]
+	//
+	// No allocation occurs here.
+	// --------------------------------------------------
+
+	offset := ve.count * ve.dimension
+
+	copy(
+		ve.vectorData[offset:offset+ve.dimension],
+		values,
+	)
+
 	vector := Vector{
 		ID:     id,
-		Values: values,
+		Offset: offset,
 	}
 
 	node := &VectorNode{
@@ -59,15 +109,16 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 	}
 
 	// First vector becomes the graph entry point.
-	if len(ve.vectors) == 0 {
+	if ve.count == 0 {
 		ve.entryID = id
 	}
 
 	ve.vectors = append(ve.vectors, vector)
 	ve.nodes[id] = node
+	ve.count++
 
 	// Nothing to connect for the first vector.
-	if len(ve.vectors) == 1 {
+	if ve.count == 1 {
 		return nil
 	}
 
@@ -77,15 +128,15 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 	//
 	// Start from the entry point and walk through the
 	// graph while a neighbor is closer to the new vector.
-	//
-	// This is a simple greedy graph baseline inspired
-	// by the search behavior of HNSW.
 	// --------------------------------------------------
 
 	currentID := ve.entryID
 	current := ve.nodes[currentID]
 
-	currentDistance := distance(values, current.Vector.Values)
+	currentDistance := ve.distanceToVector(
+		values,
+		current.Vector,
+	)
 
 	for {
 		nextID := currentID
@@ -95,7 +146,10 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 		for _, neighborID := range current.Neighbors {
 			neighbor := ve.nodes[neighborID]
 
-			d := distance(values, neighbor.Vector.Values)
+			d := ve.distanceToVector(
+				values,
+				neighbor.Vector,
+			)
 
 			if d < nextDistance {
 				nextID = neighborID
@@ -116,20 +170,39 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 
 	// Connect the new vector to the node where
 	// the greedy search stopped.
-	current.Neighbors = append(current.Neighbors, id)
+	current.Neighbors = append(
+		current.Neighbors,
+		id,
+	)
 
 	// Add the reverse connection so the graph can
 	// navigate back toward the new node.
-	node.Neighbors = append(node.Neighbors, currentID)
+	node.Neighbors = append(
+		node.Neighbors,
+		currentID,
+	)
 
 	return nil
 }
 
-func distance(a []float64, b []float64) float64 {
+// vectorValues returns the contiguous slice containing
+// the vector's values.
+//
+// No allocation occurs here.
+func (ve *VectorEngine) vectorValues(vector Vector) []float64 {
+	return ve.vectorData[vector.Offset : vector.Offset+ve.dimension]
+}
+
+func (ve *VectorEngine) distanceToVector(
+	values []float64,
+	vector Vector,
+) float64 {
 	var sum float64
 
-	for i := 0; i < len(a); i++ {
-		diff := a[i] - b[i]
+	offset := vector.Offset
+
+	for i := 0; i < ve.dimension; i++ {
+		diff := values[i] - ve.vectorData[offset+i]
 		sum += diff * diff
 	}
 
@@ -141,7 +214,7 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 		return nil
 	}
 
-	if len(ve.vectors) == 0 || k <= 0 {
+	if ve.count == 0 || k <= 0 {
 		return []Result{}
 	}
 
@@ -152,9 +225,13 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 	currentID := ve.entryID
 	current := ve.nodes[currentID]
 
-	currentDistance := distance(query, current.Vector.Values)
+	currentDistance := ve.distanceToVector(
+		query,
+		current.Vector,
+	)
 
 	visited := make(map[int]bool)
+
 	visited[currentID] = true
 
 	for {
@@ -167,7 +244,11 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 			}
 
 			neighbor := ve.nodes[neighborID]
-			d := distance(query, neighbor.Vector.Values)
+
+			d := ve.distanceToVector(
+				query,
+				neighbor.Vector,
+			)
 
 			visited[neighborID] = true
 
@@ -196,8 +277,11 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 		node := ve.nodes[id]
 
 		results = append(results, Result{
-			ID:       id,
-			Distance: distance(query, node.Vector.Values),
+			ID: id,
+			Distance: ve.distanceToVector(
+				query,
+				node.Vector,
+			),
 		})
 	}
 
