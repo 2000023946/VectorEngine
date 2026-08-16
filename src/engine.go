@@ -2,7 +2,6 @@ package src
 
 import (
 	"fmt"
-	"math"
 	"sort"
 )
 
@@ -11,60 +10,51 @@ const (
 	dimension  = 128
 )
 
-type Vector struct {
-	ID     int
-	Offset int
-}
-
 type Result struct {
 	ID       int
 	Distance float64
 }
 
-type VectorNode struct {
-	Vector    Vector
-	Neighbors []int
-}
-
 type VectorEngine struct {
-	// One large contiguous allocation:
+	// --------------------------------------------------
+	// Flat contiguous vector storage
+	// --------------------------------------------------
 	//
-	// 2,000,000 vectors * 128 dimensions * 8 bytes
+	// 2,000,000 vectors × 128 dimensions × 8 bytes
 	// = 2.048 GB
+	//
+	// Vector i occupies:
+	//
+	// vectorData[i*dimension : (i+1)*dimension]
+	// --------------------------------------------------
 	vectorData []float64
 
-	// Vector metadata only.
-	vectors []Vector
-
-	// Graph nodes.
-	nodes map[int]*VectorNode
+	// External ID for each vector.
+	// ids[i] corresponds to vectorData[i*dimension:...].
+	ids []int
 
 	dimension int
 	count     int
-	entryID   int
 }
 
 func NewVectorEngine() *VectorEngine {
 	return &VectorEngine{
-		// Preallocate ~2 GB of contiguous vector memory.
+		// One large ~2 GB contiguous allocation.
 		vectorData: make([]float64, maxVectors*dimension),
 
-		// Preallocate metadata for all vectors.
-		vectors: make([]Vector, 0, maxVectors),
-
-		// Preallocate the hash map for the expected number of vectors.
-		nodes: make(map[int]*VectorNode, maxVectors),
+		// Preallocate IDs for all possible vectors.
+		ids: make([]int, maxVectors),
 
 		dimension: dimension,
 	}
 }
 
 func (ve *VectorEngine) Insert(id int, values []float64) error {
-	// The first vector establishes the dimension
-	// of the vector space.
-	if ve.count == 0 {
-		ve.dimension = len(values)
-	} else if len(values) != ve.dimension {
+	// --------------------------------------------------
+	// Validate dimension.
+	// --------------------------------------------------
+
+	if len(values) != ve.dimension {
 		return fmt.Errorf(
 			"dimension mismatch: expected %d, got %d",
 			ve.dimension,
@@ -72,7 +62,10 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 		)
 	}
 
-	// Make sure we don't exceed our preallocated buffer.
+	// --------------------------------------------------
+	// Check capacity.
+	// --------------------------------------------------
+
 	if ve.count >= maxVectors {
 		return fmt.Errorf(
 			"vector capacity exceeded: maximum %d vectors",
@@ -81,132 +74,55 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 	}
 
 	// --------------------------------------------------
-	// Store vector in the flat contiguous buffer.
+	// Find the next vector position.
 	// --------------------------------------------------
 	//
-	// Vector i occupies:
-	//
-	// [i*dimension : (i+1)*dimension]
-	//
-	// No allocation occurs here.
+	// Vector 0 → offset 0
+	// Vector 1 → offset 128
+	// Vector 2 → offset 256
+	// ...
 	// --------------------------------------------------
 
-	offset := ve.count * ve.dimension
+	index := ve.count
+	offset := index * ve.dimension
+
+	// --------------------------------------------------
+	// Copy values into the already allocated memory.
+	//
+	// This does NOT allocate a new []float64.
+	// --------------------------------------------------
 
 	copy(
 		ve.vectorData[offset:offset+ve.dimension],
 		values,
 	)
 
-	vector := Vector{
-		ID:     id,
-		Offset: offset,
-	}
+	// Store the external ID.
+	ve.ids[index] = id
 
-	node := &VectorNode{
-		Vector:    vector,
-		Neighbors: make([]int, 0),
-	}
-
-	// First vector becomes the graph entry point.
-	if ve.count == 0 {
-		ve.entryID = id
-	}
-
-	ve.vectors = append(ve.vectors, vector)
-	ve.nodes[id] = node
 	ve.count++
-
-	// Nothing to connect for the first vector.
-	if ve.count == 1 {
-		return nil
-	}
-
-	// --------------------------------------------------
-	// Graph construction
-	// --------------------------------------------------
-	//
-	// Start from the entry point and walk through the
-	// graph while a neighbor is closer to the new vector.
-	// --------------------------------------------------
-
-	currentID := ve.entryID
-	current := ve.nodes[currentID]
-
-	currentDistance := ve.distanceToVector(
-		values,
-		current.Vector,
-	)
-
-	for {
-		nextID := currentID
-		nextDistance := currentDistance
-
-		// Check every neighbor of the current node.
-		for _, neighborID := range current.Neighbors {
-			neighbor := ve.nodes[neighborID]
-
-			d := ve.distanceToVector(
-				values,
-				neighbor.Vector,
-			)
-
-			if d < nextDistance {
-				nextID = neighborID
-				nextDistance = d
-			}
-		}
-
-		// No neighbor is closer.
-		if nextID == currentID {
-			break
-		}
-
-		// Move through the graph.
-		currentID = nextID
-		current = ve.nodes[currentID]
-		currentDistance = nextDistance
-	}
-
-	// Connect the new vector to the node where
-	// the greedy search stopped.
-	current.Neighbors = append(
-		current.Neighbors,
-		id,
-	)
-
-	// Add the reverse connection so the graph can
-	// navigate back toward the new node.
-	node.Neighbors = append(
-		node.Neighbors,
-		currentID,
-	)
 
 	return nil
 }
 
-// vectorValues returns the contiguous slice containing
-// the vector's values.
+// distanceToIndex calculates the Euclidean distance between
+// the query and the vector stored at index.
 //
-// No allocation occurs here.
-func (ve *VectorEngine) vectorValues(vector Vector) []float64 {
-	return ve.vectorData[vector.Offset : vector.Offset+ve.dimension]
-}
-
-func (ve *VectorEngine) distanceToVector(
-	values []float64,
-	vector Vector,
+// The vector is accessed directly from the flat array.
+func (ve *VectorEngine) squaredDistance(
+	query []float64,
+	index int,
 ) float64 {
+	offset := index * ve.dimension
+
 	var sum float64
 
-	offset := vector.Offset
-
 	for i := 0; i < ve.dimension; i++ {
-		diff := values[i] - ve.vectorData[offset+i]
+		diff := query[i] - ve.vectorData[offset+i]
 		sum += diff * diff
 	}
 
-	return math.Sqrt(sum)
+	return sum
 }
 
 func (ve *VectorEngine) Search(query []float64, k int) []Result {
@@ -218,80 +134,44 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 		return []Result{}
 	}
 
-	// --------------------------------------------------
-	// Greedy graph search
-	// --------------------------------------------------
-
-	currentID := ve.entryID
-	current := ve.nodes[currentID]
-
-	currentDistance := ve.distanceToVector(
-		query,
-		current.Vector,
-	)
-
-	visited := make(map[int]bool)
-
-	visited[currentID] = true
-
-	for {
-		nextID := currentID
-		nextDistance := currentDistance
-
-		for _, neighborID := range current.Neighbors {
-			if visited[neighborID] {
-				continue
-			}
-
-			neighbor := ve.nodes[neighborID]
-
-			d := ve.distanceToVector(
-				query,
-				neighbor.Vector,
-			)
-
-			visited[neighborID] = true
-
-			if d < nextDistance {
-				nextID = neighborID
-				nextDistance = d
-			}
-		}
-
-		if nextID == currentID {
-			break
-		}
-
-		currentID = nextID
-		current = ve.nodes[currentID]
-		currentDistance = nextDistance
+	if k > ve.count {
+		k = ve.count
 	}
 
-	// --------------------------------------------------
-	// Return the best result discovered by the graph.
-	// --------------------------------------------------
+	// Allocate only enough space for the requested top-k.
+	results := make([]Result, 0, k)
 
-	results := make([]Result, 0, len(visited))
+	for i := 0; i < ve.count; i++ {
+		distance := ve.squaredDistance(query, i)
 
-	for id := range visited {
-		node := ve.nodes[id]
+		result := Result{
+			ID:       ve.ids[i],
+			Distance: distance,
+		}
 
-		results = append(results, Result{
-			ID: id,
-			Distance: ve.distanceToVector(
-				query,
-				node.Vector,
-			),
-		})
+		if len(results) < k {
+			results = append(results, result)
+			continue
+		}
+
+		// Find the current worst result.
+		worst := 0
+
+		for j := 1; j < k; j++ {
+			if results[j].Distance > results[worst].Distance {
+				worst = j
+			}
+		}
+
+		// Replace it if this vector is better.
+		if distance < results[worst].Distance {
+			results[worst] = result
+		}
 	}
 
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Distance < results[j].Distance
 	})
 
-	if k > len(results) {
-		k = len(results)
-	}
-
-	return results[:k]
+	return results
 }
