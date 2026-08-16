@@ -1,0 +1,61 @@
+VectorEngine v1 — Index-Graph Experiment
+
+Status: ABANDONED
+
+Workload:
+- Random 128-dimensional vectors
+- k = 10
+- Accuracy target = 90%
+
+RESULTS
+
+Operation        Dataset     Brute Force      Graph Index
+Insert           10K         14.59 ms         318.53 ms
+Insert           100K        145.40 ms        6.85 s
+Insert           1M         1.57 s            ~357.0 s
+Search           10K         3.72 ms          0.249 ms
+Search           100K        41.53 ms         0.585 ms
+Search           1M         483.73 ms         Did not complete
+
+Accuracy:
+- Brute force: 100.00% at 10K
+- Graph index: 3.66% at 10K
+
+KEY FINDING
+
+The graph index made search much faster at 10K and 100K, but it introduced
+very large insertion/index-construction costs and extremely poor recall.
+
+The graph index is therefore abandoned for this workload.
+
+This does NOT mean graph indexing is universally bad. It means that for
+this experiment, using random 128-dimensional vectors did not produce a
+useful accuracy/performance tradeoff.
+
+COMPARISON
+
+Insert 10K:
+318.53 ms / 14.59 ms ≈ 21.8x slower
+
+Insert 100K:
+6.85 s / 145.40 ms ≈ 47.1x slower
+
+Insert 1M:
+~357 s / 1.57 s ≈ 227x slower
+
+Search 10K:
+3.72 ms → 0.249 ms
+
+Search 100K:
+41.53 ms → 0.585 ms
+
+DECISION
+
+Stop developing this index for the current workload.
+
+Return to the exact brute-force engine and optimize:
+1. Memory
+2. Computation
+3. CPU/cache
+
+The brute-force implementation remains the baseline for future comparisons.
