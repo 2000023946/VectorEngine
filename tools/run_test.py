@@ -166,6 +166,7 @@ def main():
     # Allow Go to use the test cache.
     accuracy_code, accuracy_output = run([
         "go", "test",
+        "-v",
         "./tests/accuracy"
     ])
 
