@@ -101,6 +101,6 @@ Search: O(N × D)
 Insert: O(D)
 ```
 
-The next major optimization is **algorithmic indexing**, such as IVF, to reduce the number of vectors examined per query.
+
 
 
