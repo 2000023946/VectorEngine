@@ -96,16 +96,6 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 
 // squaredDistance calls the NEON assembly routine against the vector
 // stored at index, using an already-quantized query.
-// func (ve *VectorEngine) squaredDistance(
-// 	quantizedQuery []int32,
-// 	index int,
-// ) int64 {
-// 	offset := index * ve.dimension
-// 	stored := ve.vectorData[offset : offset+ve.dimension]
-
-// 	return SquaredDistanceNEON(quantizedQuery, stored)
-// }
-
 func (ve *VectorEngine) squaredDistance(
 	quantizedQuery []int32,
 	index int,
@@ -113,14 +103,7 @@ func (ve *VectorEngine) squaredDistance(
 	offset := index * ve.dimension
 	stored := ve.vectorData[offset : offset+ve.dimension]
 
-	var distance int64
-
-	for i := 0; i < ve.dimension; i++ {
-		diff := int64(quantizedQuery[i]) - int64(stored[i])
-		distance += diff * diff
-	}
-
-	return distance
+	return SquaredDistanceNEON(quantizedQuery, stored)
 }
 
 func (ve *VectorEngine) Search(query []float64, k int) []Result {
