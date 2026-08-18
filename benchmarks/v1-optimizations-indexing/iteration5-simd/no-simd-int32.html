@@ -170,7 +170,7 @@
             <div style="color: var(--text-muted); margin-top: 5px;">Automated Test Report</div>
         </div>
         <div class="date-badge">
-            Generated: 2026-08-18 08:39:31
+            Generated: 2026-08-18 08:53:54
         </div>
     </header>
 
@@ -191,7 +191,7 @@
         <div class="summary-card">
             <span class="summary-title">Engine Accuracy</span>
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="summary-value" style="color: #166534;">97.83%</span>
+                <span class="summary-value" style="color: #166534;">99.95%</span>
                 <span class="badge pass">PASS</span>
             </div>
         </div>
@@ -210,7 +210,7 @@
             <h2>1. Unit Tests</h2>
             <span class="badge pass">PASS</span>
         </div>
-        <pre style="margin:0;">ok  	vectorengine/tests/unit	0.565s
+        <pre style="margin:0;">ok  	vectorengine/tests/unit	1.653s
 </pre>
     </div>
 
@@ -228,12 +228,12 @@ Vectors:   10000
 Queries:   1000
 Dimension: 128
 K:         10
-Correct:   9783 / 10000
-Accuracy:  97.83%
+Correct:   9995 / 10000
+Accuracy:  99.95%
 =====================================
---- PASS: TestSearchAccuracy10K (80.31s)
+--- PASS: TestSearchAccuracy10K (77.90s)
 PASS
-ok  	vectorengine/tests/accuracy	80.655s
+ok  	vectorengine/tests/accuracy	78.211s
 </pre>
     </div>
 
@@ -275,17 +275,17 @@ ok  	vectorengine/tests/accuracy	80.655s
                 
         <tr>
             <td class="font-mono">BenchmarkInitialization-8</td>
-            <td class="text-right font-mono">4283501 ns</td>
-            <td class="text-center"><span class="grade grade-A">A</span></td>
-            <td class="text-right font-mono">272007176 B</td>
-            <td class="text-center"><span class="grade grade-C">C</span></td>
+            <td class="text-right font-mono">309726579 ns</td>
+            <td class="text-center"><span class="grade grade-B">B</span></td>
+            <td class="text-right font-mono">1040007169 B</td>
+            <td class="text-center"><span class="grade grade-D">D</span></td>
             <td class="text-right font-mono">2</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
         </tr>
         
         <tr>
             <td class="font-mono">BenchmarkInsert10K-8</td>
-            <td class="text-right font-mono">2112471 ns</td>
+            <td class="text-right font-mono">1436005 ns</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
             <td class="text-right font-mono">0 B</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
@@ -295,7 +295,7 @@ ok  	vectorengine/tests/accuracy	80.655s
         
         <tr>
             <td class="font-mono">BenchmarkInsert100K-8</td>
-            <td class="text-right font-mono">21103225 ns</td>
+            <td class="text-right font-mono">14321075 ns</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
             <td class="text-right font-mono">0 B</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
@@ -305,7 +305,7 @@ ok  	vectorengine/tests/accuracy	80.655s
         
         <tr>
             <td class="font-mono">BenchmarkInsert1M-8</td>
-            <td class="text-right font-mono">283710104 ns</td>
+            <td class="text-right font-mono">246523757 ns</td>
             <td class="text-center"><span class="grade grade-B">B</span></td>
             <td class="text-right font-mono">0 B</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
@@ -315,9 +315,9 @@ ok  	vectorengine/tests/accuracy	80.655s
         
         <tr>
             <td class="font-mono">BenchmarkSearch10K-8</td>
-            <td class="text-right font-mono">1142908 ns</td>
+            <td class="text-right font-mono">1188094 ns</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
-            <td class="text-right font-mono">376 B</td>
+            <td class="text-right font-mono">760 B</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
             <td class="text-right font-mono">5</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
@@ -325,9 +325,9 @@ ok  	vectorengine/tests/accuracy	80.655s
         
         <tr>
             <td class="font-mono">BenchmarkSearch100K-8</td>
-            <td class="text-right font-mono">11300150 ns</td>
+            <td class="text-right font-mono">11890265 ns</td>
             <td class="text-center"><span class="grade grade-B">B</span></td>
-            <td class="text-right font-mono">376 B</td>
+            <td class="text-right font-mono">760 B</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
             <td class="text-right font-mono">5</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
@@ -335,9 +335,9 @@ ok  	vectorengine/tests/accuracy	80.655s
         
         <tr>
             <td class="font-mono">BenchmarkSearch1M-8</td>
-            <td class="text-right font-mono">113410801 ns</td>
+            <td class="text-right font-mono">122775366 ns</td>
             <td class="text-center"><span class="grade grade-C">C</span></td>
-            <td class="text-right font-mono">376 B</td>
+            <td class="text-right font-mono">760 B</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
             <td class="text-right font-mono">5</td>
             <td class="text-center"><span class="grade grade-A">A</span></td>
@@ -349,7 +349,7 @@ ok  	vectorengine/tests/accuracy	80.655s
 
     <!-- Chart.js Injection Script -->
     <script>
-        const chartData = {"labels": ["10K", "100K", "1M"], "insert": {"time": [2.112471, 21.103225, 283.710104], "mem": [0.0, 0.0, 0.0], "allocs": [0, 0, 0]}, "search": {"time": [1.142908, 11.30015, 113.410801], "mem": [0.00035858154296875, 0.00035858154296875, 0.00035858154296875], "allocs": [5, 5, 5]}};
+        const chartData = {"labels": ["10K", "100K", "1M"], "insert": {"time": [1.436005, 14.321075, 246.523757], "mem": [0.0, 0.0, 0.0], "allocs": [0, 0, 0]}, "search": {"time": [1.188094, 11.890265, 122.775366], "mem": [0.00072479248046875, 0.00072479248046875, 0.00072479248046875], "allocs": [5, 5, 5]}};
 
         const chartConfig = (type, label, data, color, yAxisLabel) => ({
             type: type,
