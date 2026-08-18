@@ -229,7 +229,6 @@ func TestNegativeK(t *testing.T) {
 		)
 	}
 }
-
 func TestDistanceOrdering(t *testing.T) {
 	engine := src.NewVectorEngine()
 
@@ -240,9 +239,9 @@ func TestDistanceOrdering(t *testing.T) {
 	v1[0] = 0
 	v1[1] = 0
 
-	// Vector 2 = [0.3, 0.4, 0, 0, ...]
-	v2[0] = 0.3
-	v2[1] = 0.4
+	// Vector 2 = [3, 4, 0, 0, ...]
+	v2[0] = 3
+	v2[1] = 4
 
 	err := engine.Insert(1, v1)
 	if err != nil {
@@ -254,7 +253,6 @@ func TestDistanceOrdering(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Query = [0, 0, 0, ...]
 	query := make([]float64, 128)
 
 	results := engine.Search(query, 2)
@@ -263,22 +261,19 @@ func TestDistanceOrdering(t *testing.T) {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
 
-	// Vector 1 is identical to the query, so it must be first.
 	if results[0].ID != 1 {
 		t.Fatalf("expected ID 1 first, got ID %d", results[0].ID)
 	}
 
-	// int8 quantization:
+	// Because the engine quantizes by 10,000:
 	//
-	// 0.3 * 127 = 38.1 -> 38
-	// 0.4 * 127 = 50.8 -> 51
+	// 3 -> 30,000
+	// 4 -> 40,000
 	//
-	// Squared distance:
+	// squared distance:
 	//
-	// 38² + 51²
-	// = 1,444 + 2,601
-	// = 4,045
-	expectedSquaredDistance := float64(4_045)
+	// 30,000² + 40,000² = 2,500,000,000
+	expectedSquaredDistance := float64(2_500_000_000)
 
 	if results[1].Distance != expectedSquaredDistance {
 		t.Fatalf(

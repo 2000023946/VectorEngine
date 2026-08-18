@@ -1,143 +1,84 @@
 TEXT ·SquaredDistanceNEON(SB), $0-56
-    // R0  --> query ptr
-    // R1  --> vector ptr
-    // R2  --> end pointer
-    // R3  --> final int64 accumulator
+    // R0 --> query ptr
+    // R1 --> vector ptr
+    // R2 --> end pointer
+    // R3 --> final result
     //
-    // V0 --> query values 0-7 (int8)
-    // V1 --> vector values 0-7 (int8)
+    // V0 --> query values 0-3
+    // V1 --> query values 4-7
+    // V2 --> vector values 0-3
+    // V3 --> vector values 4-7
+    // V4 --> differences 0-3
+    // V5 --> differences 4-7
     //
-    // Each lane gets independent registers so the CPU
-    // can potentially execute the arithmetic in parallel.
+    // R4-R7 --> scalar squared lane results
 
     MOVD query+0(FP), R0
     MOVD vector+24(FP), R1
 
-    // int8 = 1 byte
-    //
-    // end = query_ptr + length
+    // Calculate end pointer:
+    // end = query_ptr + length * 4
     MOVD query+8(FP), R2
+    LSL $2, R2, R2
     ADD R0, R2, R2
 
     // Final accumulator
     MOVD $0, R3
 
 Loop:
-    // Load 8 int8 values from query
-    VLD1.P 8(R0), [V0.B8]
+    // Load 8 int32 values from query
+    VLD1.P 32(R0), [V0.S4, V1.S4]
 
-    // Load 8 int8 values from vector
-    VLD1.P 8(R1), [V1.B8]
+    // Load 8 int32 values from vector
+    VLD1.P 32(R1), [V2.S4, V3.S4]
 
-    // --------------------------------------------------
-    // Lane 0
-    // --------------------------------------------------
+    // Calculate differences for both groups
+    VSUB V0.S4, V2.S4, V4.S4
+    VSUB V1.S4, V3.S4, V5.S4
 
-    VMOV V0.B[0], R4
-    VMOV V1.B[0], R5
-    SXTB R4, R4
-    SXTB R5, R5
-    SUB R5, R4, R4
+    // -------------------------
+    // First 4 lanes
+    // -------------------------
+
+    VMOV V4.S[0], R4
     MULW R4, R4, R4
 
-    // --------------------------------------------------
-    // Lane 1
-    // --------------------------------------------------
+    VMOV V4.S[1], R5
+    MULW R5, R5, R5
 
-    VMOV V0.B[1], R6
-    VMOV V1.B[1], R7
-    SXTB R6, R6
-    SXTB R7, R7
-    SUB R7, R6, R6
+    VMOV V4.S[2], R6
     MULW R6, R6, R6
 
-    // --------------------------------------------------
-    // Lane 2
-    // --------------------------------------------------
+    VMOV V4.S[3], R7
+    MULW R7, R7, R7
 
-    VMOV V0.B[2], R8
-    VMOV V1.B[2], R9
-    SXTB R8, R8
-    SXTB R9, R9
-    SUB R9, R8, R8
-    MULW R8, R8, R8
+    ADD R4, R5, R4
+    ADD R6, R7, R6
+    ADD R4, R6, R4
 
-    // --------------------------------------------------
-    // Lane 3
-    // --------------------------------------------------
-
-    VMOV V0.B[3], R10
-    VMOV V1.B[3], R11
-    SXTB R10, R10
-    SXTB R11, R11
-    SUB R11, R10, R10
-    MULW R10, R10, R10
-
-    // --------------------------------------------------
-    // Reduce lanes 0-3
-    // --------------------------------------------------
-
-    ADD R6, R4, R4
-    ADD R8, R4, R4
-    ADD R10, R4, R4
     ADD R4, R3, R3
 
-    // --------------------------------------------------
-    // Lane 4
-    // --------------------------------------------------
+    // -------------------------
+    // Second 4 lanes
+    // -------------------------
 
-    VMOV V0.B[4], R4
-    VMOV V1.B[4], R5
-    SXTB R4, R4
-    SXTB R5, R5
-    SUB R5, R4, R4
+    VMOV V5.S[0], R4
     MULW R4, R4, R4
 
-    // --------------------------------------------------
-    // Lane 5
-    // --------------------------------------------------
+    VMOV V5.S[1], R5
+    MULW R5, R5, R5
 
-    VMOV V0.B[5], R6
-    VMOV V1.B[5], R7
-    SXTB R6, R6
-    SXTB R7, R7
-    SUB R7, R6, R6
+    VMOV V5.S[2], R6
     MULW R6, R6, R6
 
-    // --------------------------------------------------
-    // Lane 6
-    // --------------------------------------------------
+    VMOV V5.S[3], R7
+    MULW R7, R7, R7
 
-    VMOV V0.B[6], R8
-    VMOV V1.B[6], R9
-    SXTB R8, R8
-    SXTB R9, R9
-    SUB R9, R8, R8
-    MULW R8, R8, R8
+    ADD R4, R5, R4
+    ADD R6, R7, R6
+    ADD R4, R6, R4
 
-    // --------------------------------------------------
-    // Lane 7
-    // --------------------------------------------------
-
-    VMOV V0.B[7], R10
-    VMOV V1.B[7], R11
-    SXTB R10, R10
-    SXTB R11, R11
-    SUB R11, R10, R10
-    MULW R10, R10, R10
-
-    // --------------------------------------------------
-    // Reduce lanes 4-7
-    // --------------------------------------------------
-
-    ADD R6, R4, R4
-    ADD R8, R4, R4
-    ADD R10, R4, R4
     ADD R4, R3, R3
-
-    // --------------------------------------------------
-    // Continue until all dimensions are processed.
-    // --------------------------------------------------
 
     CMP R2, R0
     BLO Loop
