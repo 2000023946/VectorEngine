@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"sort"
+	"sync"
 )
 
 const (
@@ -43,6 +44,7 @@ type VectorEngine struct {
 
 	dimension int
 	count     int
+	mu        sync.Mutex
 }
 
 func NewVectorEngine() *VectorEngine {
@@ -70,6 +72,9 @@ func quantizeVector(values []float64) []int32 {
 }
 
 func (ve *VectorEngine) Insert(id int, values []float64) error {
+	ve.mu.Lock()
+	defer ve.mu.Unlock()
+
 	if len(values) != ve.dimension {
 		return fmt.Errorf(
 			"dimension mismatch: expected %d, got %d",
