@@ -7,13 +7,8 @@ from datetime import datetime
 from pathlib import Path
 
 
-# 1. Resolve paths based on the new 'tools/' location
-# Path(__file__) is tools/run_test.py
-# .parent is tools/
-# .parent.parent is VectorEngine/
+# 1. Resolve paths
 ROOT = Path(__file__).resolve().parent.parent
-
-# 2. Output directly to the new benchmarks directory
 REPORT_DIR = ROOT / "benchmarks" 
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 REPORT = REPORT_DIR / "results.html"
@@ -32,7 +27,6 @@ def run(command):
     
     output = []
     
-    # Check if stdout exists to satisfy Pylance
     if process.stdout is not None:
         for line in process.stdout:
             print(line, end="")
@@ -46,7 +40,6 @@ def get_accuracy(output):
     if match:
         return float(match.group(1))
     return None
-
 
 def get_benchmarks(output):
     pattern = re.compile(
@@ -64,15 +57,39 @@ def get_benchmarks(output):
         
     return benchmarks
 
+def parse_throughput_output(output):
+    results = {"Search": [], "Insert": [], "Mixed": []}
+    current_workload = None
+    
+    for line in output.splitlines():
+        if "SEARCH-ONLY" in line:
+            current_workload = "Search"
+        elif "INSERT-ONLY" in line:
+            current_workload = "Insert"
+        elif "MIXED WORKLOAD" in line:
+            current_workload = "Mixed"
+            
+        # Match table row format: Concurrency | Operations | Ops/sec | Average | P50 | P95 | P99
+        # Example: 1 | 1000 | 123.45 | 10.234ms | 10.123ms | 11.456ms | 12.789ms
+        match = re.match(r"^\s*(\d+)\s+\|\s+(\d+)\s+\|\s+([\d.]+)\s+\|\s+(\S+)\s+\|\s+(\S+)\s+\|\s+(\S+)\s+\|\s+(\S+)", line)
+        if match and current_workload:
+            results[current_workload].append({
+                "concurrency": match.group(1),
+                "operations": match.group(2),
+                "throughput": match.group(3),
+                "average": match.group(4),
+                "p50": match.group(5),
+                "p95": match.group(6),
+                "p99": match.group(7),
+            })
+    return results
 
 def badge(passed, text=None):
     label = text if text else ("PASS" if passed else "FAIL")
     css_class = "pass" if passed else "fail"
     return f'<span class="badge {css_class}">{label}</span>'
 
-
 # --- Evaluator Functions ---
-
 def parse_time_to_ms(val_str):
     try:
         match = re.match(r"([\d.]+)\s*([a-zA-Zµ]+)", val_str.strip())
@@ -86,7 +103,6 @@ def parse_time_to_ms(val_str):
         return val
     except Exception:
         return 0.0
-
 
 def parse_mem_to_mb(val_str):
     try:
@@ -102,19 +118,17 @@ def parse_mem_to_mb(val_str):
     except Exception:
         return 0.0
 
-
 def grade_time(op, ms):
     if 'Search' in op:
         if ms < 10: return 'A'
         elif ms < 100: return 'B'
         elif ms < 500: return 'C'
         else: return 'D'
-    else: # Insert
+    else:
         if ms < 200: return 'A'
         elif ms < 2000: return 'B'
         elif ms < 5000: return 'C'
         else: return 'D'
-
 
 def grade_memory(op, mb):
     if 'Search' in op:
@@ -123,13 +137,12 @@ def grade_memory(op, mb):
         elif mb <= 20: return 'C'
         elif mb <= 50: return 'D'
         else: return 'F'
-    else: # Insert
+    else:
         if mb < 20: return 'A'
         elif mb <= 100: return 'B'
         elif mb <= 500: return 'C'
         elif mb <= 1024: return 'D'
         else: return 'F'
-
 
 def grade_allocs(op, allocs):
     if 'Search' in op:
@@ -138,72 +151,40 @@ def grade_allocs(op, allocs):
         elif allocs <= 100: return 'C'
         elif allocs <= 500: return 'D'
         else: return 'F'
-    else: # Insert
+    else:
         if allocs < 100: return 'A'
         elif allocs <= 1000: return 'B'
         elif allocs <= 10000: return 'C'
         elif allocs <= 100000: return 'D'
         else: return 'F'
 
-
 def main():
     print("Running VectorEngine tests...")
     print()
 
-    # --------------------------------------------------
-    # UNIT TESTS
-    # --------------------------------------------------
-    # Always run unit tests from scratch.
-    unit_code, unit_output = run([
-        "go", "test",
-        "-count=1",
-        "./tests/unit"
-    ])
+    # 1. UNIT TESTS
+    unit_code, unit_output = run(["go", "test", "-count=1", "./tests/unit"])
 
-    # --------------------------------------------------
-    # ACCURACY TESTS
-    # --------------------------------------------------
-    # Allow Go to use the test cache.
-    accuracy_code, accuracy_output = run([
-        "go", "test",
-        "-v",
-        "./tests/accuracy"
-    ])
-
+    # 2. ACCURACY TESTS
+    accuracy_code, accuracy_output = run(["go", "test", "-v", "./tests/accuracy"])
     accuracy = get_accuracy(accuracy_output)
+    accuracy_passed = (accuracy_code == 0 and accuracy is not None and accuracy >= 90.0)
 
-    accuracy_passed = (
-        accuracy_code == 0
-        and accuracy is not None
-        and accuracy >= 90.0
-    )
-
-    # --------------------------------------------------
-    # PERFORMANCE BENCHMARKS
-    # --------------------------------------------------
-    # Never rely on cached benchmark results.
-    benchmark_code, benchmark_output = run([
-        "go", "test",
-        "-count=1",
-        "-bench=.",
-        "-benchmem",
-        "./tests/performance"
-    ])
-
+    # 3. PERFORMANCE BENCHMARKS (Latency)
+    benchmark_code, benchmark_output = run(["go", "test", "-count=1", "-bench=.", "-benchmem", "./tests/performance"])
     benchmarks = get_benchmarks(benchmark_output)
+
+    # 4. THROUGHPUT BENCHMARKS (Concurrency)
+    # Using `go run` instead of `go test` because concurrency_benchmark.go is a `package main` executable.
+    throughput_code, throughput_output = run(["go", "run", "./tests/throughput/concurrency_benchmark.go"])
+    throughput_results = parse_throughput_output(throughput_output)
     
-    overall_passed = (unit_code == 0 and accuracy_passed and benchmark_code == 0)
+    overall_passed = (unit_code == 0 and accuracy_passed and benchmark_code == 0 and throughput_code == 0)
 
-    print("Pipeline Status:", "PASS" if overall_passed else "FAIL")
+    print("\nPipeline Status:", "PASS" if overall_passed else "FAIL")
 
-    # --------------------------------------------------
-    # GRADE BENCHMARKS & EXTRACT CHART DATA
-    # --------------------------------------------------
+    # --- HTML Formatting for Performance (Latency) ---
     benchmark_rows = ""
-    insert_summary_rows = ""
-    search_summary_rows = ""
-
-    # Initialize data structure for Chart.js
     chart_data = {
         "labels": ["10K", "100K", "1M"],
         "insert": {"time": [0,0,0], "mem": [0,0,0], "allocs": [0,0,0]},
@@ -215,7 +196,6 @@ def main():
         m_mb = parse_mem_to_mb(mem_val)
         a_int = int(allocs_val)
 
-        # Populate chart data
         if "10K" in name: idx = 0
         elif "100K" in name: idx = 1
         elif "1M" in name: idx = 2
@@ -231,7 +211,6 @@ def main():
         m_grade = grade_memory(name, m_mb)
         a_grade = grade_allocs(name, a_int)
 
-        # Build Detailed Row
         benchmark_rows += f"""
         <tr>
             <td class="font-mono">{html.escape(name)}</td>
@@ -244,30 +223,50 @@ def main():
         </tr>
         """
 
-        # Build Summary Block Row
-        size_match = re.search(r"(10K|100K|1M)", name)
-        size_str = size_match.group(1) if size_match else "N/A"
-        
-        summary_row = f"""
-        <tr>
-            <td style="padding: 6px 0; border: none; font-weight: 500;">{size_str}</td>
-            <td class="text-right" style="padding: 6px 0; border: none;"><span class="grade grade-{t_grade}">{t_grade}</span></td>
-        </tr>
-        """
-        
-        if "Insert" in name:
-            insert_summary_rows += summary_row
-        elif "Search" in name:
-            search_summary_rows += summary_row
-
     if not benchmark_rows:
-        benchmark_rows = """
-        <tr><td colspan="7" class="text-center">No benchmark results found.</td></tr>
+        benchmark_rows = '<tr><td colspan="7" class="text-center">No benchmark results found.</td></tr>'
+
+    # --- HTML Formatting for Throughput (Concurrency) ---
+    throughput_html = ""
+    for workload, data in throughput_results.items():
+        if not data:
+            continue
+            
+        throughput_html += f"<h3 style='margin-top: 30px;'>{workload} Workload</h3>"
+        throughput_html += """
+        <table>
+            <thead>
+                <tr>
+                    <th class="text-center">Concurrency (Threads)</th>
+                    <th class="text-right">Operations</th>
+                    <th class="text-right" style="color: #059669;">Ops / sec (Throughput)</th>
+                    <th class="text-right">Avg Latency</th>
+                    <th class="text-right">p50 Latency</th>
+                    <th class="text-right">p95 Latency</th>
+                    <th class="text-right">p99 Latency</th>
+                </tr>
+            </thead>
+            <tbody>
         """
+        for row in data:
+            throughput_html += f"""
+                <tr>
+                    <td class="font-mono text-center"><strong>{html.escape(row['concurrency'])}</strong></td>
+                    <td class="text-right font-mono text-muted">{html.escape(row['operations'])}</td>
+                    <td class="text-right font-mono" style="color: #059669; font-weight: bold; font-size: 1.1em;">{html.escape(row['throughput'])}</td>
+                    <td class="text-right font-mono">{html.escape(row['average'])}</td>
+                    <td class="text-right font-mono">{html.escape(row['p50'])}</td>
+                    <td class="text-right font-mono text-muted">{html.escape(row['p95'])}</td>
+                    <td class="text-right font-mono text-muted">{html.escape(row['p99'])}</td>
+                </tr>
+            """
+        throughput_html += "</tbody></table>"
+
+    if not throughput_html:
+        throughput_html = "<p class='text-muted'>No throughput data parsed. Ensure concurrency_benchmark.go printed correctly.</p>"
+
 
     accuracy_display = "UNKNOWN" if accuracy is None else f"{accuracy:.2f}%"
-
-    # Serialize chart data for JS injection
     chart_json = json.dumps(chart_data)
 
     # --------------------------------------------------
@@ -279,7 +278,6 @@ def main():
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VectorEngine Test Report</title>
-<!-- Include Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
     :root {{
@@ -288,11 +286,9 @@ def main():
         --text-muted: #64748b;
         --card-bg: #ffffff;
         --border-color: #e2e8f0;
-        
         --code-bg: #1e293b;
         --code-text: #f8fafc;
     }}
-
     body {{
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         background-color: var(--bg-color);
@@ -302,156 +298,60 @@ def main():
         padding: 40px 20px;
         line-height: 1.6;
     }}
-
-    header {{
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        border-bottom: 2px solid var(--border-color);
-        padding-bottom: 20px;
-        margin-bottom: 40px;
-    }}
-
+    header {{ display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--border-color); padding-bottom: 20px; margin-bottom: 40px; }}
     h1 {{ margin: 0; font-size: 2.5rem; letter-spacing: -0.025em; }}
+    .date-badge {{ background: var(--card-bg); border: 1px solid var(--border-color); padding: 6px 12px; border-radius: 6px; font-size: 0.875rem; color: var(--text-muted); font-weight: 500; }}
     
-    .date-badge {{
-        background: var(--card-bg);
-        border: 1px solid var(--border-color);
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 0.875rem;
-        color: var(--text-muted);
-        font-weight: 500;
-    }}
-
-    /* Summary Grid */
-    .summary-grid {{
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 20px;
-        margin-bottom: 40px;
-    }}
-
-    .summary-card {{
-        background: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 24px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }}
-
+    .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 40px; }}
+    .summary-card {{ background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 10px; }}
     .summary-title {{ font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; }}
     .summary-value {{ font-size: 2rem; font-weight: 700; color: var(--text-main); }}
 
-    /* Badges & Grades */
-    .badge {{
-        display: inline-flex;
-        align-items: center;
-        padding: 4px 12px;
-        border-radius: 9999px;
-        font-size: 0.875rem;
-        font-weight: 600;
-        letter-spacing: 0.025em;
-    }}
+    .badge {{ display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 9999px; font-size: 0.875rem; font-weight: 600; }}
     .pass {{ background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }}
     .fail {{ background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }}
     .warn {{ background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a; }}
 
-    .grade {{
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 26px;
-        height: 26px;
-        border-radius: 6px;
-        font-weight: 700;
-        font-size: 0.85rem;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    }}
+    .grade {{ display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; font-weight: 700; font-size: 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }}
     .grade-A {{ background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }}
     .grade-B {{ background-color: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }}
     .grade-C {{ background-color: #fef08a; color: #854d0e; border: 1px solid #fde047; }}
     .grade-D {{ background-color: #fed7aa; color: #9a3412; border: 1px solid #fdba74; }}
     .grade-F {{ background-color: #fecaca; color: #991b1b; border: 1px solid #fca5a5; }}
 
-    /* Layout Elements */
-    .overall-banner {{
-        border-radius: 12px;
-        padding: 20px 30px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 40px;
-        background: #e8f5e9;
-        color: #1b5e20;
-    }}
+    .overall-banner {{ border-radius: 12px; padding: 20px 30px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px; background: #e8f5e9; color: #1b5e20; }}
+    .overall-banner.failed {{ background: #fee2e2; color: #991b1b; }}
     .overall-banner h2 {{ margin: 0; font-size: 1.5rem; }}
-
-    .section-card {{
-        background: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 30px;
-        margin-bottom: 30px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }}
+    .section-card {{ background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 30px; margin-bottom: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
     .section-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }}
-    .section-header h2 {{ margin: 0; font-size: 1.5rem; border: none; padding: 0; }}
+    .section-header h2 {{ margin: 0; font-size: 1.5rem; }}
 
-    .chart-grid {{
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 20px;
-        margin-bottom: 30px;
-    }}
-    .chart-container {{
-        background: #f8fafc;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 15px;
-    }}
+    .chart-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }}
+    .chart-container {{ background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; }}
 
-    /* Typography & Tables */
-    pre {{
-        background: var(--code-bg);
-        color: var(--code-text);
-        padding: 20px;
-        border-radius: 8px;
-        overflow-x: auto;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 0.875rem;
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-    }}
-
+    pre {{ background: var(--code-bg); color: var(--code-text); padding: 20px; border-radius: 8px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.875rem; }}
     table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
     th, td {{ padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border-color); }}
     th {{ background-color: #f1f5f9; font-weight: 600; font-size: 0.875rem; color: var(--text-muted); text-transform: uppercase; }}
     tr:last-child td {{ border-bottom: none; }}
-    
     .font-mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; }}
     .text-right {{ text-align: right; }}
     .text-center {{ text-align: center; }}
-
+    .text-muted {{ color: var(--text-muted); }}
 </style>
 </head>
 <body>
-
     <header>
         <div>
             <h1>VectorEngine</h1>
             <div style="color: var(--text-muted); margin-top: 5px;">Automated Test Report</div>
         </div>
-        <div class="date-badge">
-            Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-        </div>
+        <div class="date-badge">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
     </header>
 
-    <div class="overall-banner">
+    <div class="overall-banner {'failed' if not overall_passed else ''}">
         <h2>Pipeline Status</h2>
-        <span style="font-size: 1.5rem; font-weight: bold;">✅ PASSED</span>
+        <span style="font-size: 1.5rem; font-weight: bold;">{'✅ PASSED' if overall_passed else '❌ FAILED'}</span>
     </div>
 
     <div class="summary-grid">
@@ -462,7 +362,6 @@ def main():
                 {badge(unit_code == 0, "Passing" if unit_code == 0 else "Failing")}
             </div>
         </div>
-        
         <div class="summary-card">
             <span class="summary-title">Engine Accuracy</span>
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -470,12 +369,11 @@ def main():
                 {badge(accuracy_passed)}
             </div>
         </div>
-
         <div class="summary-card">
-            <span class="summary-title">Performance Target</span>
+            <span class="summary-title">Throughput Assessment</span>
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="summary-value">Baseline</span>
-                <span class="badge warn">⚠️ Brute Force</span>
+                <span class="summary-value">Captured</span>
+                {badge(throughput_code == 0, "Success" if throughput_code == 0 else "Error")}
             </div>
         </div>
     </div>
@@ -485,7 +383,10 @@ def main():
             <h2>1. Unit Tests</h2>
             {badge(unit_code == 0)}
         </div>
-        <pre style="margin:0;">{html.escape(unit_output)}</pre>
+        <details>
+            <summary style="cursor: pointer; color: var(--text-muted); font-weight: 600;">View Raw Output</summary>
+            <pre style="margin-top: 10px;">{html.escape(unit_output)}</pre>
+        </details>
     </div>
 
     <div class="section-card">
@@ -493,16 +394,33 @@ def main():
             <h2>2. Engine Accuracy</h2>
             {badge(accuracy_passed)}
         </div>
-        <pre style="margin:0;">{html.escape(accuracy_output)}</pre>
+        <details>
+            <summary style="cursor: pointer; color: var(--text-muted); font-weight: 600;">View Raw Output</summary>
+            <pre style="margin-top: 10px;">{html.escape(accuracy_output)}</pre>
+        </details>
     </div>
 
     <div class="section-card">
         <div class="section-header">
-            <h2>3. Performance Assessment</h2>
+            <h2>3. Throughput Assessment (Concurrency)</h2>
+            {badge(throughput_code == 0)}
+        </div>
+        <p class="text-muted">Measurements evaluating engine scalability and ops/sec throughput under varying concurrency levels over a dataset of 1,000,000 vectors.</p>
+        
+        {throughput_html}
+
+        <details style="margin-top: 30px;">
+            <summary style="cursor: pointer; color: var(--text-muted); font-weight: 600;">View Raw Console Output</summary>
+            <pre style="margin-top: 10px;">{html.escape(throughput_output)}</pre>
+        </details>
+    </div>
+
+    <div class="section-card">
+        <div class="section-header">
+            <h2>4. Performance Assessment (Latency Breakdown)</h2>
             <span class="badge warn" style="font-size: 0.75rem;">⚠️ BASELINE — INDEXING REQUIRED</span>
         </div>
         
-        <!-- CHARTS SECTION -->
         <h3 style="font-size: 1.1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-top: 10px;">Search Progression Visualized</h3>
         <div class="chart-grid">
             <div class="chart-container"><canvas id="searchTimeChart"></canvas></div>
@@ -536,10 +454,8 @@ def main():
         </table>
     </div>
 
-    <!-- Chart.js Injection Script -->
     <script>
         const chartData = {chart_json};
-
         const chartConfig = (type, label, data, color, yAxisLabel) => ({{
             type: type,
             data: {{
@@ -568,18 +484,14 @@ def main():
                 }}
             }}
         }});
-
-        // Render Search Charts
         new Chart(document.getElementById('searchTimeChart'), chartConfig('line', 'Search Time (ms)', chartData.search.time, '#ef4444', 'Milliseconds'));
         new Chart(document.getElementById('searchMemChart'), chartConfig('bar', 'Search Memory (MB)', chartData.search.mem, '#3b82f6', 'Megabytes'));
         new Chart(document.getElementById('searchAllocChart'), chartConfig('bar', 'Search Allocations', chartData.search.allocs, '#10b981', 'Count'));
 
-        // Render Insert Charts
         new Chart(document.getElementById('insertTimeChart'), chartConfig('line', 'Insert Time (ms)', chartData.insert.time, '#f59e0b', 'Milliseconds'));
         new Chart(document.getElementById('insertMemChart'), chartConfig('bar', 'Insert Memory (MB)', chartData.insert.mem, '#8b5cf6', 'Megabytes'));
         new Chart(document.getElementById('insertAllocChart'), chartConfig('bar', 'Insert Allocations', chartData.insert.allocs, '#14b8a6', 'Count'));
     </script>
-
 </body>
 </html>
 """
@@ -589,7 +501,6 @@ def main():
     print(f"Report generated: {REPORT}")
     print("Opening report in your default browser...")
     webbrowser.open(f"file://{REPORT.absolute()}")
-
 
 if __name__ == "__main__":
     main()
