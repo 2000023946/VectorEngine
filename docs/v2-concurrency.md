@@ -33,7 +33,7 @@ The ARM64 approach did **not produce a meaningful improvement**, so it was not a
 
 ## Conclusion
 
-The concurrency optimization phase is complete.
+The concurrency optimization phase is complete. There was no meaningful change from the optimized baseline solution.
 
 * Concurrent search: **implemented and benchmarked**
 * Concurrent insert: **implemented and benchmarked**
