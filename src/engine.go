@@ -44,19 +44,7 @@ type VectorEngine struct {
 
 	dimension int
 	count     int
-
-	// Protects shared engine state.
-	//
-	// Readers:
-	//   Search()
-	//
-	// Writers:
-	//   Insert()
-	//   Reset()
-	//
-	// Multiple readers can hold RLock simultaneously.
-	// Writers require exclusive Lock access.
-	mu sync.RWMutex
+	mu        sync.Mutex
 }
 
 func NewVectorEngine() *VectorEngine {
@@ -83,19 +71,7 @@ func quantizeVector(values []float64) []int32 {
 	return out
 }
 
-// Insert adds one vector to the engine.
-//
-// Insert is a writer operation because it modifies:
-//
-//   - vectorData
-//   - ids
-//   - count
-//
-// Therefore it requires exclusive access.
 func (ve *VectorEngine) Insert(id int, values []float64) error {
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
-
 	if len(values) != ve.dimension {
 		return fmt.Errorf(
 			"dimension mismatch: expected %d, got %d",
@@ -184,12 +160,6 @@ func (ve *VectorEngine) searchRange(
 }
 
 func (ve *VectorEngine) Search(query []float64, k int) []Result {
-	// Search is a read operation.
-	//
-	// Multiple Search calls can hold RLock simultaneously.
-	ve.mu.RLock()
-	defer ve.mu.RUnlock()
-
 	if len(query) != ve.dimension {
 		return nil
 	}
@@ -204,8 +174,7 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 
 	// Quantize the query exactly once.
 	//
-	// Every search worker receives the same read-only
-	// quantized query.
+	// Every goroutine receives the same read-only quantized query.
 	quantizedQuery := quantizeVector(query)
 
 	// --------------------------------------------------
@@ -310,12 +279,6 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 	return results
 }
 
-// Reset clears the logical number of vectors.
-//
-// Reset is a writer operation because it modifies count.
 func (ve *VectorEngine) Reset() {
-	ve.mu.Lock()
-	defer ve.mu.Unlock()
-
 	ve.count = 0
 }
