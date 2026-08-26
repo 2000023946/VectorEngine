@@ -1,7 +1,9 @@
 package src
 
 import (
+	"encoding/binary"
 	"fmt"
+	"os"
 	"runtime"
 	"sort"
 	"sync"
@@ -12,12 +14,19 @@ const (
 	dimension  = 128
 
 	// Number of independent search partitions.
-	// Each partition is processed by one goroutine.
 	searchWorkers = 6
 
 	// quantizeScale controls precision vs. overflow headroom.
-	// float value v is stored as int32(round(v * quantizeScale)).
 	quantizeScale = 10000.0
+
+	// Maximum number of pending persistence operations.
+	//
+	// If this queue becomes full, Insert() blocks until
+	// the persistence worker makes space.
+	persistenceQueueSize = 16
+
+	// File used for persistence.
+	persistenceFile = "vectorengine.dat"
 )
 
 type Result struct {
@@ -29,14 +38,7 @@ type VectorEngine struct {
 	// --------------------------------------------------
 	// Flat contiguous QUANTIZED vector storage
 	// --------------------------------------------------
-	//
-	// 2,000,000 vectors × 128 dimensions × 4 bytes (int32)
-	// = 1.024 GB
-	//
-	// Vector i occupies:
-	//
-	// vectorData[i*dimension : (i+1)*dimension]
-	// --------------------------------------------------
+
 	vectorData []int32
 
 	// External ID for each vector.
@@ -44,14 +46,103 @@ type VectorEngine struct {
 
 	dimension int
 	count     int
-	mu        sync.Mutex
+
+	// Protects:
+	//
+	// count
+	// vectorData
+	// ids
+	// resetting
+	//
+	// RLock allows multiple concurrent searches.
+	// Lock provides exclusive access for inserts/resets.
+	mu sync.RWMutex
+
+	// --------------------------------------------------
+	// Persistence
+	// --------------------------------------------------
+
+	// Bounded queue of persistence requests.
+	//
+	// Inserts place save requests into this queue.
+	// One persistence worker consumes the queue.
+	persistenceQueue chan struct{}
+
+	// Tracks persistence operations that have been
+	// accepted by the system but have not finished.
+	//
+	// Reset waits for this to reach zero.
+	saveWG sync.WaitGroup
+
+	// True while Reset is in progress.
+	//
+	// Inserts received while resetting are rejected.
+	resetting bool
 }
 
 func NewVectorEngine() *VectorEngine {
-	return &VectorEngine{
-		vectorData: make([]int32, maxVectors*dimension),
-		ids:        make([]int, maxVectors),
-		dimension:  dimension,
+	ve := &VectorEngine{
+		vectorData:       make([]int32, maxVectors*dimension),
+		ids:              make([]int, maxVectors),
+		dimension:        dimension,
+		persistenceQueue: make(chan struct{}, 1000000),
+	}
+
+	go ve.persistenceWorker("vectorengine.dat")
+
+	return ve
+}
+
+// --------------------------------------------------
+// Persistence Worker
+// --------------------------------------------------
+//
+// The worker waits for persistence requests.
+//
+// Every request causes the worker to take a consistent
+// snapshot of RAM and write that snapshot to disk.
+//
+// Because there is only one worker, disk writes cannot
+// race with each other.
+//
+
+func (ve *VectorEngine) persistenceWorker(path string) {
+	for {
+		// Wait for at least one persistence request.
+		<-ve.persistenceQueue
+
+		// We received one request.
+		pending := 1
+
+		// --------------------------------------------------
+		// Drain everything currently waiting in the queue.
+		// --------------------------------------------------
+		//
+		// Do not block waiting for more requests.
+		// Take whatever is already available and make
+		// one persistence snapshot for the entire batch.
+		//
+		for {
+			select {
+			case <-ve.persistenceQueue:
+				pending++
+			default:
+				goto save
+			}
+		}
+
+	save:
+		// --------------------------------------------------
+		// One save for the entire batch.
+		// --------------------------------------------------
+
+		ve.saveToDisk(path)
+
+		// Every queued persistence request represented by
+		// this batch is now complete.
+		for i := 0; i < pending; i++ {
+			ve.saveWG.Done()
+		}
 	}
 }
 
@@ -80,7 +171,22 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 		)
 	}
 
+	// --------------------------------------------------
+	// Protect insertion state.
+	// --------------------------------------------------
+
+	ve.mu.Lock()
+
+	// Do not allow inserts during Reset.
+	if ve.resetting {
+		ve.mu.Unlock()
+
+		return fmt.Errorf("reset in progress")
+	}
+
 	if ve.count >= maxVectors {
+		ve.mu.Unlock()
+
 		return fmt.Errorf(
 			"vector capacity exceeded: maximum %d vectors",
 			maxVectors,
@@ -91,13 +197,36 @@ func (ve *VectorEngine) Insert(id int, values []float64) error {
 	offset := index * ve.dimension
 
 	// Quantize once at insert time.
-	// This cost is paid once and never repeated during search.
 	for i, v := range values {
 		ve.vectorData[offset+i] = quantize(v)
 	}
 
 	ve.ids[index] = id
 	ve.count++
+
+	// --------------------------------------------------
+	// Register persistence BEFORE releasing the lock.
+	// --------------------------------------------------
+	//
+	// This save now belongs to the set of operations
+	// that Reset must wait for.
+	//
+
+	ve.saveWG.Add(1)
+
+	ve.mu.Unlock()
+
+	// --------------------------------------------------
+	// Enqueue persistence request.
+	// --------------------------------------------------
+	//
+	// Normally this is extremely fast.
+	//
+	// If the queue is full, this blocks until the
+	// persistence worker creates space.
+	//
+
+	ve.persistenceQueue <- struct{}{}
 
 	return nil
 }
@@ -116,9 +245,6 @@ func (ve *VectorEngine) squaredDistance(
 }
 
 // searchRange searches one independent partition of the dataset.
-//
-// Each goroutine gets its own range and its own local top-k result.
-// No shared result state is modified during the search.
 func (ve *VectorEngine) searchRange(
 	quantizedQuery []int32,
 	start int,
@@ -141,7 +267,6 @@ func (ve *VectorEngine) searchRange(
 			continue
 		}
 
-		// Find the worst result in this partition.
 		worst := 0
 
 		for j := 1; j < k; j++ {
@@ -150,7 +275,6 @@ func (ve *VectorEngine) searchRange(
 			}
 		}
 
-		// Replace the local worst result if this vector is closer.
 		if result.Distance < results[worst].Distance {
 			results[worst] = result
 		}
@@ -160,6 +284,9 @@ func (ve *VectorEngine) searchRange(
 }
 
 func (ve *VectorEngine) Search(query []float64, k int) []Result {
+	ve.mu.RLock()
+	defer ve.mu.RUnlock()
+
 	if len(query) != ve.dimension {
 		return nil
 	}
@@ -172,20 +299,7 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 		k = ve.count
 	}
 
-	// Quantize the query exactly once.
-	//
-	// Every goroutine receives the same read-only quantized query.
 	quantizedQuery := quantizeVector(query)
-
-	// --------------------------------------------------
-	// Determine number of partitions.
-	// --------------------------------------------------
-	//
-	// Never create more workers than vectors.
-	//
-	// runtime.GOMAXPROCS(0) gives the number of logical
-	// processors available to the Go runtime.
-	// --------------------------------------------------
 
 	workers := searchWorkers
 
@@ -196,10 +310,6 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 	if workers > ve.count {
 		workers = ve.count
 	}
-
-	// --------------------------------------------------
-	// Split the dataset into M independent ranges.
-	// --------------------------------------------------
 
 	resultsPerWorker := make([][]Result, workers)
 
@@ -232,20 +342,9 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 		}(worker, start, end)
 	}
 
-	// Wait for every partition to finish.
 	for i := 0; i < workers; i++ {
 		<-done
 	}
-
-	// --------------------------------------------------
-	// Merge local top-k results.
-	//
-	// Each worker produced at most K results.
-	//
-	// M workers × K results
-	//             ↓
-	//        final global K
-	// --------------------------------------------------
 
 	results := make([]Result, 0, k)
 
@@ -271,7 +370,6 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 		}
 	}
 
-	// Return results sorted from nearest to farthest.
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Distance < results[j].Distance
 	})
@@ -279,6 +377,299 @@ func (ve *VectorEngine) Search(query []float64, k int) []Result {
 	return results
 }
 
-func (ve *VectorEngine) Reset() {
+// --------------------------------------------------
+// Reset
+// --------------------------------------------------
+//
+// Reset:
+//
+// 1. Blocks new inserts.
+// 2. Makes RAM logically empty.
+// 3. Waits for all queued persistence operations.
+// 4. Deletes the persisted database.
+// 5. Allows inserts again.
+//
+
+func (ve *VectorEngine) Reset() error {
+
+	// Establish reset boundary.
+	ve.mu.Lock()
+
+	if ve.resetting {
+		ve.mu.Unlock()
+
+		return fmt.Errorf("reset already in progress")
+	}
+
+	ve.resetting = true
+
+	// RAM is immediately logically empty.
 	ve.count = 0
+
+	ve.mu.Unlock()
+
+	// --------------------------------------------------
+	// Wait until every persistence operation that was
+	// accepted before Reset has finished.
+	// --------------------------------------------------
+
+	ve.saveWG.Wait()
+
+	// --------------------------------------------------
+	// All old persistence operations are finished.
+	//
+	// Now it is safe to remove the disk snapshot.
+	// --------------------------------------------------
+
+	err := os.Remove(persistenceFile)
+
+	if err != nil && !os.IsNotExist(err) {
+
+		ve.mu.Lock()
+		ve.resetting = false
+		ve.mu.Unlock()
+
+		return fmt.Errorf(
+			"failed to remove database snapshot: %w",
+			err,
+		)
+	}
+
+	// Reset is completely finished.
+	ve.mu.Lock()
+	ve.resetting = false
+	ve.mu.Unlock()
+
+	return nil
+}
+
+// --------------------------------------------------
+// saveToDisk
+// --------------------------------------------------
+//
+// Takes a consistent RAM snapshot and writes it to disk.
+//
+// The engine lock is held only while copying the data.
+// Disk I/O happens after the lock is released.
+//
+
+func (ve *VectorEngine) saveToDisk(path string) {
+
+	ve.mu.RLock()
+
+	count := ve.count
+	dimension := ve.dimension
+
+	ids := make([]int, count)
+	copy(ids, ve.ids[:count])
+
+	vectorData := make([]int32, count*dimension)
+	copy(
+		vectorData,
+		ve.vectorData[:count*dimension],
+	)
+
+	ve.mu.RUnlock()
+
+	// --------------------------------------------------
+	// RAM lock is now released.
+	// Disk I/O does not block Insert/Search.
+	// --------------------------------------------------
+
+	file, err := os.Create(path)
+	if err != nil {
+		fmt.Printf(
+			"saveToDisk: failed to create file: %v\n",
+			err,
+		)
+		return
+	}
+
+	defer file.Close()
+
+	if err := binary.Write(
+		file,
+		binary.LittleEndian,
+		int64(count),
+	); err != nil {
+		fmt.Printf(
+			"saveToDisk: failed to write count: %v\n",
+			err,
+		)
+		return
+	}
+
+	if err := binary.Write(
+		file,
+		binary.LittleEndian,
+		int64(dimension),
+	); err != nil {
+		fmt.Printf(
+			"saveToDisk: failed to write dimension: %v\n",
+			err,
+		)
+		return
+	}
+
+	for _, id := range ids {
+		if err := binary.Write(
+			file,
+			binary.LittleEndian,
+			int64(id),
+		); err != nil {
+			fmt.Printf(
+				"saveToDisk: failed to write ID: %v\n",
+				err,
+			)
+			return
+		}
+	}
+
+	for _, value := range vectorData {
+		if err := binary.Write(
+			file,
+			binary.LittleEndian,
+			value,
+		); err != nil {
+			fmt.Printf(
+				"saveToDisk: failed to write vector data: %v\n",
+				err,
+			)
+			return
+		}
+	}
+
+	if err := file.Sync(); err != nil {
+		fmt.Printf(
+			"saveToDisk: failed to sync file: %v\n",
+			err,
+		)
+		return
+	}
+}
+
+// --------------------------------------------------
+// Reboot
+// --------------------------------------------------
+//
+// Reboot is synchronous.
+//
+// The caller should invoke this before accepting
+// requests from clients.
+//
+
+func (ve *VectorEngine) Reboot(path string) error {
+
+	ve.mu.Lock()
+	defer ve.mu.Unlock()
+
+	file, err := os.Open(path)
+
+	if err != nil {
+		if os.IsNotExist(err) {
+			ve.count = 0
+			return nil
+		}
+
+		return fmt.Errorf(
+			"failed to open database snapshot: %w",
+			err,
+		)
+	}
+
+	defer file.Close()
+
+	var count int64
+	var storedDimension int64
+
+	if err := binary.Read(
+		file,
+		binary.LittleEndian,
+		&count,
+	); err != nil {
+		return fmt.Errorf(
+			"failed to read vector count: %w",
+			err,
+		)
+	}
+
+	if err := binary.Read(
+		file,
+		binary.LittleEndian,
+		&storedDimension,
+	); err != nil {
+		return fmt.Errorf(
+			"failed to read dimension: %w",
+			err,
+		)
+	}
+
+	if storedDimension != int64(ve.dimension) {
+		return fmt.Errorf(
+			"dimension mismatch: expected %d, got %d",
+			ve.dimension,
+			storedDimension,
+		)
+	}
+
+	if count < 0 || count > maxVectors {
+		return fmt.Errorf(
+			"invalid vector count: %d",
+			count,
+		)
+	}
+
+	// Load IDs.
+	for i := 0; i < int(count); i++ {
+		var id int64
+
+		if err := binary.Read(
+			file,
+			binary.LittleEndian,
+			&id,
+		); err != nil {
+			return fmt.Errorf(
+				"failed to read vector ID: %w",
+				err,
+			)
+		}
+
+		ve.ids[i] = int(id)
+	}
+
+	// Load vector data.
+	vectorCount := int(count) * ve.dimension
+
+	for i := 0; i < vectorCount; i++ {
+		if err := binary.Read(
+			file,
+			binary.LittleEndian,
+			&ve.vectorData[i],
+		); err != nil {
+			return fmt.Errorf(
+				"failed to read vector data: %w",
+				err,
+			)
+		}
+	}
+
+	// Only expose recovered data after the entire
+	// snapshot has been successfully loaded.
+	ve.count = int(count)
+
+	return nil
+}
+
+// --------------------------------------------------
+// WaitForPersistence
+// --------------------------------------------------
+//
+// Useful for benchmarks/tests.
+//
+// It waits until all currently accepted persistence
+// operations have completed.
+//
+
+func (ve *VectorEngine) WaitForPersistence() {
+	ve.saveWG.Wait()
 }
