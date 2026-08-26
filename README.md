@@ -106,3 +106,17 @@ tools/        Benchmark/testing utilities
 
 VectorEngine is an experimental vector database focused on understanding and measuring systems-level performance tradeoffs in storage, computation, concurrency, and persistence.
 
+## Future Work
+
+### Distributed VectorEngine
+
+The next stage is to extend VectorEngine from a single-node database into a distributed vector-search system.
+
+Planned work includes:
+
+- Sharding vectors across multiple nodes
+- Routing queries to the appropriate shards
+- Parallel distributed search and result merging
+- Replication for improved fault tolerance
+- Node health detection and recovery
+- Distributed persistence and recovery
