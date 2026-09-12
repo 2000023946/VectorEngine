@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VectorEngine Test Report</title>
+<!-- Include Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    :root {
+        --bg-color: #f8fafc;
+        --text-main: #0f172a;
+        --text-muted: #64748b;
+        --card-bg: #ffffff;
+        --border-color: #e2e8f0;
+        
+        --code-bg: #1e293b;
+        --code-text: #f8fafc;
+    }
+
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        line-height: 1.6;
+    }
+
+    header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        border-bottom: 2px solid var(--border-color);
+        padding-bottom: 20px;
+        margin-bottom: 40px;
+    }
+
+    h1 { margin: 0; font-size: 2.5rem; letter-spacing: -0.025em; }
+    
+    .date-badge {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        font-weight: 500;
+    }
+
+    /* Summary Grid */
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 40px;
+    }
+
+    .summary-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .summary-title { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; }
+    .summary-value { font-size: 2rem; font-weight: 700; color: var(--text-main); }
+
+    /* Badges & Grades */
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        letter-spacing: 0.025em;
+    }
+    .pass { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .fail { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .warn { background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+
+    .grade {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .grade-A { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .grade-B { background-color: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
+    .grade-C { background-color: #fef08a; color: #854d0e; border: 1px solid #fde047; }
+    .grade-D { background-color: #fed7aa; color: #9a3412; border: 1px solid #fdba74; }
+    .grade-F { background-color: #fecaca; color: #991b1b; border: 1px solid #fca5a5; }
+
+    /* Layout Elements */
+    .overall-banner {
+        border-radius: 12px;
+        padding: 20px 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 40px;
+        background: #e8f5e9;
+        color: #1b5e20;
+    }
+    .overall-banner h2 { margin: 0; font-size: 1.5rem; }
+
+    .section-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 30px;
+        margin-bottom: 30px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .section-header h2 { margin: 0; font-size: 1.5rem; border: none; padding: 0; }
+
+    .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .chart-container {
+        background: #f8fafc;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 15px;
+    }
+
+    /* Typography & Tables */
+    pre {
+        background: var(--code-bg);
+        color: var(--code-text);
+        padding: 20px;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.875rem;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border-color); }
+    th { background-color: #f1f5f9; font-weight: 600; font-size: 0.875rem; color: var(--text-muted); text-transform: uppercase; }
+    tr:last-child td { border-bottom: none; }
+    
+    .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+
+</style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>VectorEngine</h1>
+            <div style="color: var(--text-muted); margin-top: 5px;">Automated Test Report</div>
+        </div>
+        <div class="date-badge">
+            Generated: 2026-08-16 14:15:28
+        </div>
+    </header>
+
+    <div class="overall-banner">
+        <h2>Pipeline Status</h2>
+        <span style="font-size: 1.5rem; font-weight: bold;">✅ PASSED</span>
+    </div>
+
+    <div class="summary-grid">
+        <div class="summary-card">
+            <span class="summary-title">Unit Tests</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="summary-value">Valid</span>
+                <span class="badge pass">Passing</span>
+            </div>
+        </div>
+        
+        <div class="summary-card">
+            <span class="summary-title">Engine Accuracy</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="summary-value" style="color: #166534;">100.00%</span>
+                <span class="badge fail">FAIL</span>
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <span class="summary-title">Performance Target</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="summary-value">Baseline</span>
+                <span class="badge warn">⚠️ Brute Force</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-card">
+        <div class="section-header">
+            <h2>1. Unit Tests</h2>
+            <span class="badge pass">PASS</span>
+        </div>
+        <pre style="margin:0;">ok  	vectorengine/tests/unit	0.374s
+</pre>
+    </div>
+
+    <div class="section-card">
+        <div class="section-header">
+            <h2>2. Engine Accuracy</h2>
+            <span class="badge fail">FAIL</span>
+        </div>
+        <pre style="margin:0;">=== RUN   TestSearchAccuracy10K
+
+=====================================
+VectorEngine Accuracy Test
+=====================================
+Vectors:   10000
+Queries:   1000
+Dimension: 128
+K:         10
+Correct:   10000 / 10000
+Accuracy:  100.00%
+=====================================
+--- PASS: TestSearchAccuracy10K (80.83s)
+=== RUN   TestSearchAccuracy100K
+panic: test timed out after 10m0s
+	running tests:
+		TestSearchAccuracy100K (8m39s)
+
+goroutine 3 [running]:
+testing.(*M).startAlarm.func1()
+	/usr/local/go/src/testing/testing.go:2802 +0x2cc
+created by time.goFunc
+	/usr/local/go/src/time/sleep.go:215 +0x38
+
+goroutine 1 [chan receive, 8 minutes]:
+testing.(*T).Run(0x51f7052e6008, {0x104c42675?, 0x1eafdd9004bf83c0?}, 0x104d99238)
+	/usr/local/go/src/testing/testing.go:2109 +0x3bc
+testing.runTests.func1(0x51f7052e6008)
+	/usr/local/go/src/testing/testing.go:2585 +0x40
+testing.tRunner(0x51f7052e6008, 0x51f70529ec48)
+	/usr/local/go/src/testing/testing.go:2036 +0xc4
+testing.runTests({0x104c3f774, 0xc}, {0x104c43b3d, 0x1b}, 0x51f7052b2018, {0x104dbdd80, 0x3, 0x3}, {0x80808080790a1030?, 0x104c404e0?, ...})
+	/usr/local/go/src/testing/testing.go:2583 +0x3f0
+testing.(*M).Run(0x51f7052a2140)
+	/usr/local/go/src/testing/testing.go:2443 +0x578
+main.main()
+	_testmain.go:50 +0x80
+
+goroutine 2 [runnable]:
+vectorengine/tests/accuracy.bruteForce({0x51f706438000?, 0x186a0, 0xc6c4?}, {0x51f706682000, 0x186a0, 0x0?}, {0x51f70c054400, 0x80, 0x0?}, 0xa)
+	/Users/momoabucar/Desktop/VectorEngine/tests/accuracy/accuracy_test.go:61 +0x1c8
+vectorengine/tests/accuracy.runAccuracyTest(0x51f7052e6488, 0x186a0)
+	/Users/momoabucar/Desktop/VectorEngine/tests/accuracy/accuracy_test.go:126 +0x30c
+vectorengine/tests/accuracy.TestSearchAccuracy100K(0x51f7052e6488?)
+	/Users/momoabucar/Desktop/VectorEngine/tests/accuracy/accuracy_test.go:177 +0x24
+testing.tRunner(0x51f7052e6488, 0x104d99238)
+	/usr/local/go/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/usr/local/go/src/testing/testing.go:2101 +0x3a8
+FAIL	vectorengine/tests/accuracy	600.325s
+FAIL
+</pre>
+    </div>
+
+    <div class="section-card">
+        <div class="section-header">
+            <h2>3. Performance Assessment</h2>
+            <span class="badge warn" style="font-size: 0.75rem;">⚠️ BASELINE — INDEXING REQUIRED</span>
+        </div>
+        
+        <!-- CHARTS SECTION -->
+        <h3 style="font-size: 1.1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-top: 10px;">Search Progression Visualized</h3>
+        <div class="chart-grid">
+            <div class="chart-container"><canvas id="searchTimeChart"></canvas></div>
+            <div class="chart-container"><canvas id="searchMemChart"></canvas></div>
+            <div class="chart-container"><canvas id="searchAllocChart"></canvas></div>
+        </div>
+
+        <h3 style="font-size: 1.1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-top: 40px;">Insert Progression Visualized</h3>
+        <div class="chart-grid">
+            <div class="chart-container"><canvas id="insertTimeChart"></canvas></div>
+            <div class="chart-container"><canvas id="insertMemChart"></canvas></div>
+            <div class="chart-container"><canvas id="insertAllocChart"></canvas></div>
+        </div>
+
+        <h3 style="font-size: 1.1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-top: 50px;">Detailed Benchmark Matrix</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Benchmark Suite</th>
+                    <th class="text-right">Time / op</th>
+                    <th class="text-center" style="width: 70px;">Grade</th>
+                    <th class="text-right">Memory / op</th>
+                    <th class="text-center" style="width: 70px;">Grade</th>
+                    <th class="text-right">Allocs / op</th>
+                    <th class="text-center" style="width: 70px;">Grade</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+        <tr>
+            <td class="font-mono">BenchmarkInsert10K-8</td>
+            <td class="text-right font-mono">14594759 ns</td>
+            <td class="text-center"><span class="grade grade-A">A</span></td>
+            <td class="text-right font-mono">11711085 B</td>
+            <td class="text-center"><span class="grade grade-A">A</span></td>
+            <td class="text-right font-mono">10019</td>
+            <td class="text-center"><span class="grade grade-D">D</span></td>
+        </tr>
+        
+        <tr>
+            <td class="font-mono">BenchmarkInsert100K-8</td>
+            <td class="text-right font-mono">145399220 ns</td>
+            <td class="text-center"><span class="grade grade-A">A</span></td>
+            <td class="text-right font-mono">120164992 B</td>
+            <td class="text-center"><span class="grade grade-C">C</span></td>
+            <td class="text-right font-mono">100029</td>
+            <td class="text-center"><span class="grade grade-F">F</span></td>
+        </tr>
+        
+        <tr>
+            <td class="font-mono">BenchmarkInsert1M-8</td>
+            <td class="text-right font-mono">1565544875 ns</td>
+            <td class="text-center"><span class="grade grade-B">B</span></td>
+            <td class="text-right font-mono">1196413648 B</td>
+            <td class="text-center"><span class="grade grade-F">F</span></td>
+            <td class="text-right font-mono">1000040</td>
+            <td class="text-center"><span class="grade grade-F">F</span></td>
+        </tr>
+        
+        <tr>
+            <td class="font-mono">BenchmarkSearch10K-8</td>
+            <td class="text-right font-mono">3719033 ns</td>
+            <td class="text-center"><span class="grade grade-A">A</span></td>
+            <td class="text-right font-mono">163928 B</td>
+            <td class="text-center"><span class="grade grade-A">A</span></td>
+            <td class="text-right font-mono">4</td>
+            <td class="text-center"><span class="grade grade-A">A</span></td>
+        </tr>
+        
+        <tr>
+            <td class="font-mono">BenchmarkSearch100K-8</td>
+            <td class="text-right font-mono">41525289 ns</td>
+            <td class="text-center"><span class="grade grade-B">B</span></td>
+            <td class="text-right font-mono">1605720 B</td>
+            <td class="text-center"><span class="grade grade-B">B</span></td>
+            <td class="text-right font-mono">4</td>
+            <td class="text-center"><span class="grade grade-A">A</span></td>
+        </tr>
+        
+        <tr>
+            <td class="font-mono">BenchmarkSearch1M-8</td>
+            <td class="text-right font-mono">483733167 ns</td>
+            <td class="text-center"><span class="grade grade-C">C</span></td>
+            <td class="text-right font-mono">16007256 B</td>
+            <td class="text-center"><span class="grade grade-C">C</span></td>
+            <td class="text-right font-mono">4</td>
+            <td class="text-center"><span class="grade grade-A">A</span></td>
+        </tr>
+        
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Chart.js Injection Script -->
+    <script>
+        const chartData = {"labels": ["10K", "100K", "1M"], "insert": {"time": [14.594759, 145.39922, 1565.544875], "mem": [11.168560981750488, 114.5982666015625, 1140.9889678955078], "allocs": [10019, 100029, 1000040]}, "search": {"time": [3.719033, 41.525289, 483.733167], "mem": [0.15633392333984375, 1.5313339233398438, 15.265708923339844], "allocs": [4, 4, 4]}};
+
+        const chartConfig = (type, label, data, color, yAxisLabel) => ({
+            type: type,
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: label,
+                    data: data,
+                    backgroundColor: type === 'line' ? color + '33' : color,
+                    borderColor: color,
+                    borderWidth: 2,
+                    fill: type === 'line',
+                    tension: 0.2
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    title: { display: true, text: label, font: { size: 14 } }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: yAxisLabel }
+                    }
+                }
+            }
+        });
+
+        // Render Search Charts
+        new Chart(document.getElementById('searchTimeChart'), chartConfig('line', 'Search Time (ms)', chartData.search.time, '#ef4444', 'Milliseconds'));
+        new Chart(document.getElementById('searchMemChart'), chartConfig('bar', 'Search Memory (MB)', chartData.search.mem, '#3b82f6', 'Megabytes'));
+        new Chart(document.getElementById('searchAllocChart'), chartConfig('bar', 'Search Allocations', chartData.search.allocs, '#10b981', 'Count'));
+
+        // Render Insert Charts
+        new Chart(document.getElementById('insertTimeChart'), chartConfig('line', 'Insert Time (ms)', chartData.insert.time, '#f59e0b', 'Milliseconds'));
+        new Chart(document.getElementById('insertMemChart'), chartConfig('bar', 'Insert Memory (MB)', chartData.insert.mem, '#8b5cf6', 'Megabytes'));
+        new Chart(document.getElementById('insertAllocChart'), chartConfig('bar', 'Insert Allocations', chartData.insert.allocs, '#14b8a6', 'Count'));
+    </script>
+
+</body>
+</html>
